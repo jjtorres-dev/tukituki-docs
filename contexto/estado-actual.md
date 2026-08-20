@@ -41,17 +41,10 @@ hecho vigente, remitiendo al historial para el detalle.
 |---|---|---|---|
 | Backend | `tukituki-backend` | `main` | `29fe187aa31f5aad2db20ecd49534a218b358ab6` (`29fe187a`) |
 | Admin Web | `tukituki-admin-web` | `main` | `989ffc42faef5788c18455993d2462285b4db18d` (`989ffc42`) |
-| Driver | `tukituki-driver-app` | `main` | `9c2a7f75da3abe375dd16a3336507145aece7455` (`9c2a7f7`) |
-| Passenger | `tukituki-passenger-app` | `main` | `5c4f0f9136f2e49a4b746755963e01fa29aa3d49` (`5c4f0f9`) |
+| Driver | `tukituki-driver-app` | `main` | `2743274900ef33374a76606b62ff841d476c232f` (`2743274`) |
+| Passenger | `tukituki-passenger-app` | `main` | `7d717ff4b908dd1c0d5f932fca30c280b03b5f8f` (`7d717ff`) |
 
-⚠️ **Nota (2026-08-20)**: estos valores son los que estaban registrados en
-el documento original al momento de dividirlo, copiados tal cual, **sin
-verificar contra el estado real de git**. Se sabe que al menos dos ya
-están desactualizados: `main` de `tukituki-driver-app` y de
-`tukituki-passenger-app` avanzaron el mismo día con la fusión de
-`R4.4B` (ver `historial-checkpoints.md`). Contrastar los cuatro contra
-`git rev-parse main`/`git log -1` real de cada repo antes de confiar en
-esta tabla — esa verificación queda para una tarea separada.
+✅ **Verificado (2026-08-20)** contra `git branch --show-current` + `git rev-parse HEAD` reales de los cuatro repos, working tree limpio en los cuatro. Backend y Admin Web coincidían con lo que ya estaba registrado; Driver y Passenger se actualizaron — ambos habían avanzado el mismo día con la fusión de `R4.4B` (ver `historial-checkpoints.md`).
 
 El detalle de cómo se llegó a cada uno de estos commits (checkpoints,
 fast-forwards, smoke tests, limpieza de ramas) está en
