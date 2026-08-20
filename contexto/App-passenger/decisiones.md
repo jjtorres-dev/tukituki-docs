@@ -431,3 +431,71 @@ Evidencia:
 `lib/features/ride/presentation/ride_searching_screen.dart` (`_RideRouteMapState`, `_handleDriverLocationUpdate()`, `_onDriverMarkerAnimationTick()`, `_driverMarkerDistanceMeters()`); `test/features/ride/presentation/ride_searching_screen_test.dart`, grupo `'R4.4B: interpolación visual del marker del Driver'` (9 casos: primera posición directa, animación A→B con punto intermedio verificado, interrupción por una posición C sin salto hacia atrás, coordenada igual sin reiniciar animación, `driverLocation` null transitorio, cambio de conductor, cambio de ride, salto >300m con snap directo, dispose sin dejar Timer/Ticker pendiente). Commit `7d717ff4b908dd1c0d5f932fca30c280b03b5f8f`, rama `origin/test/r4-smooth-driver-marker`.
 
 **`PHYSICAL-REVIEW-PASS`** confirmado por JuanJo (2026-08-20, dispositivo real, campus universitario, terreno abierto y buena señal GPS): movimiento del marcador fluido y sin tirones en el caso base. Con esa aprobación, `test/r4-smooth-driver-marker` se fusionó a `main` por fast-forward puro — ver checkpoint `R4.4B` en `estado-proyecto.md` sección 16 para el detalle completo de la integración. **Pendiente explícito, sin cerrar**: el umbral de salto grande (300m, `_driverMarkerLargeJumpMetersThreshold`) no se probó en zona de señal GPS difícil (interiores, zonas urbanas densas, túneles) — la prueba física cubrió solo el caso base. Ver también `errores-conocidos.md` sobre una referencia a un `AGENTS.md` que no existe en este repositorio.
+
+---
+
+## `DESIGN-SYSTEM-R1` — Infraestructura de tema, sin migrar pantallas (2026-08-20)
+
+Estado:
+EN CURSO, rama `test/design-system-r1`, sin commit todavía — JuanJo
+va a probar en dispositivo físico antes de commitear. No confundir con
+un checkpoint cerrado.
+
+Qué se decidió (dos decisiones de diseño técnico, ninguna del sistema
+de diseño en sí — ese es `sistema-de-diseno.md`, fuente de verdad para
+colores/tipografía/medidas):
+
+**1. Organización del tema en cuatro archivos bajo `lib/core/theme/`**,
+uno por tipo de token (`passenger_colors.dart`, `passenger_typography.dart`,
+`passenger_spacing.dart`) más uno que ensambla el `ThemeData`
+(`passenger_theme.dart`). Cada archivo de tokens es una clase con
+constructor privado (`const PassengerColors._()`) y solo miembros
+`static const`, mismo patrón que ya usa `DriverPalette` en
+`tukituki-driver-app` (`lib/core/theme/driver_palette.dart`) — se copió
+esa convención en vez de inventar una nueva, y se extendió a
+tipografía y medidas porque Driver todavía no las tiene tokenizadas
+(`sistema-de-diseno.md` sección 8, "Aplicación al Driver" sigue
+pendiente).
+
+**2. El `ThemeData` global NO fija `fontFamily: 'Manrope'` a nivel de
+tema**, aunque la fuente ya está declarada en `pubspec.yaml` (Paso 2 de
+este checkpoint) y `PassengerTypography` ya expone los 9 estilos de la
+sección 3 con `fontFamily: 'Manrope'` explícito por estilo.
+
+Por qué:
+
+Sobre la decisión 2, la que alguien podría querer "corregir" sin
+contexto: si `ThemeData(fontFamily: 'Manrope')` se fija a nivel global,
+Flutter lo propaga a través de `textTheme` a **todo** `Text` que no
+especifique su propio `fontFamily` — es decir, cambiaría de Roboto a
+Manrope el texto de las seis pantallas que hoy tienen sus estilos
+escritos a mano (`_darkGreen`, `_ctaYellow`, etc., ver auditoría de
+`DESIGN-SYSTEM-R1` en el reporte del checkpoint) sin que ninguna de
+ellas lo pidiera explícitamente. El objetivo explícito de este
+checkpoint era "infraestructura de tema, cero cambio visual salvo lo
+que se herede del tema" (cursor, selección, ripple, barra de estado) —
+fijar `fontFamily` global habría roto esa condición para toda la app de
+golpe, no solo para los cuatro puntos ya documentados en
+`errores-conocidos.md`. La migración real de cada pantalla a
+`PassengerTypography` (y ahí sí, a Manrope) es la tarea siguiente,
+pantalla por pantalla, no un interruptor global.
+
+Alternativas descartadas:
+
+- Fijar `fontFamily: 'Manrope'` en el `ThemeData` ahora, ya que la
+  fuente estaba lista — descartada explícitamente por la razón de
+  arriba: hace exactamente lo que este checkpoint tenía prohibido
+  hacer (alterar el aspecto de pantallas no migradas).
+- Un solo archivo `passenger_theme.dart` con todos los tokens
+  inline — descartada para mantener el mismo patrón de un archivo por
+  responsabilidad que ya usa `DriverPalette`, y porque mezclar colores,
+  tipografía y medidas en un solo archivo dificulta encontrar un token
+  cuando la migración de pantallas empiece.
+
+Evidencia:
+`lib/core/theme/passenger_colors.dart`, `passenger_typography.dart`,
+`passenger_spacing.dart`, `passenger_theme.dart`; `lib/app.dart`
+(`theme: PassengerTheme.light`); `tukituki-driver-app/lib/core/theme/driver_palette.dart`
+(patrón de referencia); `errores-conocidos.md`, sección "Pantallas que
+dependían del `ThemeData` por defecto" (los cuatro puntos activos que sí
+cambian de aspecto por herencia del `ColorScheme`, no de la fuente).

@@ -129,6 +129,52 @@ tras confirmar contención total.
   no quedan issues abiertos conocidos asociados a ellos en el repo
   (no hay tracker de issues local).
 
+## Pantallas que dependían del `ThemeData` por defecto — cambian de aspecto con `DESIGN-SYSTEM-R1` (2026-08-20)
+
+Contexto: `DESIGN-SYSTEM-R1` (rama `test/design-system-r1`, sin commit
+todavía) reemplazó el `ThemeData` de `lib/app.dart` — antes
+`colorSchemeSeed: Colors.amber` genérico, ahora
+`ColorScheme.fromSeed(seedColor: PassengerColors.acento, error:
+PassengerColors.error)` + `scaffoldBackgroundColor:
+PassengerColors.crema` (ver `decisiones.md`, entrada
+`DESIGN-SYSTEM-R1`). Ninguna pantalla fue migrada a los tokens nuevos
+en este checkpoint — los ~103 `Color()` escritos a mano por pantalla
+(splash, login, register, home, ride_searching, ride_receipt) siguen
+intactos y no cambian de aspecto.
+
+JuanJo aceptó como esperado que el cursor, la selección de texto, el
+ripple y la barra de estado cambien de tono en toda la app por heredar
+del tema. Además de eso, se identificaron **cinco puntos concretos**
+que dependían 100% del tema por defecto (sin ningún color propio) y
+por lo tanto también cambian de aspecto — no solo cursor/ripple, sino
+el fondo del `Scaffold`/`AppBar` completo:
+
+1. `lib/features/passenger/presentation/complete_profile_screen.dart`
+   — `Scaffold`/`AppBar` sin ningún color propio. **Pantalla activa y
+   alcanzable** ("Completa tu perfil").
+2. `lib/features/ride/presentation/ride_searching_screen.dart:2844` —
+   `Scaffold` del estado "cargando" (spinner), sin `backgroundColor`.
+   Activo y alcanzable.
+3. `lib/features/ride/presentation/ride_searching_screen.dart:2852-2853`
+   — `Scaffold`/`AppBar` del estado "no encontramos un viaje activo"
+   (error), sin colores propios. Activo y alcanzable.
+4. `lib/features/ride/presentation/ride_searching_screen.dart:2885-2888`
+   — `AppBar` de fallback para un estado de ride no cubierto por los
+   demás builders, sin `backgroundColor`. Activo y alcanzable.
+5. `lib/features/auth/presentation/otp_screen.dart` — mismo patrón
+   (`Scaffold`/`AppBar` sin colores propios), pero **es código
+   huérfano**: ningún flujo activo navega a `/otp` desde que el
+   registro dejó de requerir OTP (commit `34e62eb`, ver `decisiones.md`
+   "Verificación de teléfono por OTP se volvió opcional"). El cambio de
+   aspecto aquí no es observable en la práctica — **no vale la pena
+   investigarlo ni "corregirlo"** salvo que se reactive esa ruta.
+
+Pendiente para la tarea de migración de pantallas (fuera de alcance de
+`DESIGN-SYSTEM-R1`): decidir si los puntos 1-4 reciben colores propios
+de marca explícitos (como ya tienen splash/login/register/ride_receipt)
+o si se dejan heredando del tema — pero ya heredando de los tokens de
+marca reales, no de un seed genérico.
+
 ## Notas de alcance de esta verificación
 
 - No se ejecutó `flutter build apk`/`appbundle` completo (fuera de

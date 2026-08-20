@@ -47,6 +47,17 @@ lanza `StateError` si la variable no fue definida — la app no arranca
 sin backend configurado. No hay un valor por defecto ni un modo
 offline/mock.
 
+### Contra el backend de staging
+
+```
+flutter run --dart-define=API_BASE_URL=https://tukituki-backend-staging.up.railway.app/api/v1
+```
+
+`API_BASE_URL` debe incluir el prefijo `/api/v1` (`API_PREFIX` en
+`tukituki-backend/.env`) — el repo concatena el path relativo del
+endpoint (p. ej. `auth/me`) directamente sobre esta base
+(`lib/core/network/api_client.dart`), sin agregarlo por su cuenta.
+
 Solo hay target Android disponible en este repo (no `ios/`).
 
 ## Tests
