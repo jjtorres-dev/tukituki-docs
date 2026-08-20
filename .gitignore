@@ -1,0 +1,28 @@
+# Sistema operativo
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editores
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Archivos temporales
+*.tmp
+*.bak
+*.log
+
+# Secretos y credenciales — este repo es solo documentación,
+# nunca debería contener nada de esto, pero se ignora por si acaso
+# alguien copia un archivo real aquí por error
+.env
+.env.*
+*.pem
+*.key
+*.p12
+*.keystore
+*.jks
+secrets.*

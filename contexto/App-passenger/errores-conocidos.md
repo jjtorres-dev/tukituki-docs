@@ -1,0 +1,139 @@
+# errores-conocidos
+
+Repositorio:
+tukituki-passenger-app
+
+Branch analizada:
+main
+
+Commit analizado:
+5c4f0f9136f2e49a4b746755963e01fa29aa3d49
+
+Última actualización:
+2026-08-18 (refrescado tras `CROSS-APP-R4.3I`, fast-forward de `test/r4-ride-identities` a `main`)
+
+Fuente de verdad:
+Este documento es contexto auxiliar. Si contradice al código actual,
+el código y los tests tienen prioridad.
+
+---
+
+## Baseline de tests
+
+`flutter test` en este commit (2026-08-15, Flutter 3.44.6 / Dart
+3.12.2): **155 tests ejecutados, 155 pasando, 0 fallando, 0 skips
+visibles en la salida**. No hay tests marcados `skip:` encontrados por
+lectura de código.
+
+## Baseline de análisis estático
+
+`flutter analyze` en este commit: **"No issues found!"** — sin
+warnings ni infos pendientes bajo el set de reglas de
+`flutter_lints ^6.0.0` configurado en `analysis_options.yaml`.
+
+`flutter pub get` (disparado por `flutter analyze`) reporta 14
+paquetes con versiones más nuevas disponibles pero incompatibles con
+los constraints actuales de `pubspec.yaml` (`flutter pub outdated` da
+el detalle) — no es un error, es información de paquetes desactualizados
+respecto a upstream; no se han verificado breaking changes de subirlos.
+
+## Comentarios FIXME/TODO relevantes
+
+No se encontraron marcadores `TODO`, `FIXME`, `XXX` ni `HACK` en
+`lib/` (búsqueda exhaustiva por patrón). Los comentarios "de advertencia"
+presentes en el código son explicativos de invariantes, no marcadores
+de trabajo pendiente (ver `passenger_ride.dart:72-83`,
+`home_screen.dart:50-57` y `:102-120`).
+
+- **Inconsistencia conocida (2026-08-20) — referencia a un `AGENTS.md` que no existe en este repositorio**: el comentario de `_handleDriverLocationUpdate()` en `lib/features/ride/presentation/ride_searching_screen.dart` (línea ~3278, checkpoint `R4.4B`, ver `decisiones.md`) dice textualmente "Reglas (ver AGENTS.md R4.4B)", pero no existe ningún archivo `AGENTS.md` en la raíz de `tukituki-passenger-app` (confirmado por búsqueda directa — tampoco existe en `tukituki-driver-app`, que tiene el mismo patrón de comentario en `driver_active_ride_screen.dart`). No se creó el archivo ni se editó el comentario como parte de esta auditoría documental (son cambios de código, fuera de su alcance) — queda registrado aquí como rastro para quien retome `R4.4B`.
+
+## Configuraciones delicadas
+
+- **`API_BASE_URL` es obligatorio en runtime**: si se olvida
+  `--dart-define=API_BASE_URL=...` al compilar/ejecutar, la app falla
+  inmediatamente en `main()` con un `StateError` antes de mostrar
+  cualquier UI (`lib/core/config/app_config.dart`). No hay mensaje de
+  error amigable en pantalla para este caso — es un crash de arranque.
+- **`MAPS_API_KEY` vía `android/local.properties`**: si el archivo o la
+  propiedad no existen, `build.gradle.kts` usa `""` como default
+  silencioso (`localProperties.getProperty("MAPS_API_KEY", "")`) — el
+  build no falla, pero el mapa de Google no funcionará en runtime sin
+  aviso explícito en build time.
+- **Firma de release = firma de debug** (`android/app/build.gradle.kts:60-67`):
+  cualquier APK "release" generado tal cual desde este repo está
+  firmado con la clave de debug de Flutter, no apto para publicación
+  en Play Store sin configurar un `signingConfig` propio primero.
+
+## Incompatibilidades / limitaciones técnicas demostrables
+
+- **Prefijo telefónico fijo a `+51`** (Perú) hardcodeado en
+  `login_screen.dart` y `register_screen.dart` — la app no puede
+  autenticar números de otro país sin cambiar código.
+- **`cancelledBy == 'DRIVER'` no distingue cancelación normal de
+  no-show**: documentado explícitamente en el propio código
+  (`passenger_ride.dart:72-77`) como limitación actual del backend, no
+  del cliente — "Backend no expone `cancellationType` a Passenger
+  todavía".
+- **Ruta `/otp` y `OtpScreen` son código huérfano**: siguen compilando
+  y están registrados en `app_router.dart`, pero ningún flujo activo
+  navega a ellos desde que el registro dejó de requerir OTP (commit
+  `34e62eb`). Un cambio futuro que reactive el flujo debe revisar que
+  `OtpArguments`/`OtpScreen` sigan siendo compatibles con el backend
+  actual (no verificado por tests, porque no hay test que ejercite esa
+  ruta).
+- **Sin reintentos automáticos de red más allá del refresh de
+  sesión**: cualquier error de conexión (`connectionError`,
+  timeouts) en una request que no sea 401 se propaga tal cual al
+  widget, que solo puede mostrar un mensaje y dejar que el usuario
+  reintente manualmente (patrón repetido en todas las pantallas, no
+  hay política de retry/backoff).
+- **Sin caché offline**: si el dispositivo pierde conectividad durante
+  el polling de un ride activo, la última información visible puede
+  quedar desactualizada hasta que vuelva la conexión; no hay
+  indicador explícito de "sin conexión" distinto del mensaje de error
+  genérico por pantalla.
+
+## Discrepancia doc/código encontrada y corregida (checkpoint R4.2)
+
+Las secciones "passenger" de `arquitectura.md` y la entrada "Perfil de
+pasajero como paso separado" de `decisiones.md` describían la
+finalización de perfil como un "paso obligatorio" — no lo era: el
+resultado de `getMyProfile()` en `SplashScreen` se descartaba sin usar
+y la app siempre continuaba a `/home`. El propio `flutter test` de
+`main`@`a5d2411e` no detectaba esto porque el test entonces vigente
+(`'Perfil 404 y sin ride continúa a home'`) afirmaba ese mismo
+comportamiento como esperado, en vez de señalarlo como un defecto.
+Corregido en `test/r4-passenger-identity` (`R4.2`,
+`PHYSICAL-REVIEW-PASS`, 2026-08-18) — ver `decisiones.md`. **Integrado a
+`main`@`91357d17cdb8e154124021b1ab9dc33a3bdd9ae6`** (`CROSS-APP-R4.2D`,
+fast-forward, 2026-08-18) y confirmado por `MAIN-PHYSICAL-SMOKE-PASS`
+de JuanJo (`CROSS-APP-R4.2E`, 2026-08-18) — **`FINAL-CLOSED`**: **181
+tests, todos en verde** (`flutter analyze` limpio) — 26 más que el
+baseline previo de 155 sobre `main`@`a5d2411e`. Rama de test eliminada
+tras confirmar contención total.
+
+## Bugs resueltos durante `CROSS-APP-R4.3` (histórico, ya corregido y aprobado físicamente)
+
+- **BUG RESOLVED — foto del Driver parpadeaba durante el polling** (`DRIVER_ARRIVING`/`DRIVER_ARRIVED`, encontrado y corregido en el mismo checkpoint, 2026-08-18): con un Driver real con foto, la imagen aparecía/desaparecía en cada ciclo de `Timer.periodic` (3s). Causa raíz: el capability token firmado de Storage rota en cada respuesta del Backend aunque sea la misma foto; `Image.network` trataba cada URL nueva como un recurso distinto y soltaba el frame anterior mientras cargaba el nuevo. Fix: última foto válida conservada únicamente en memoria RAM de la instancia (`_stableDriverPhotoUri`), con alcance por `rideId` + `driverProfileId` (cambia cualquiera de los dos → reset total), una capability nueva y válida del mismo Driver reemplaza a la anterior, una respuesta transitoria sin foto válida no borra la última foto válida, `gaplessPlayback: true` para evitar el parpadeo a blanco entre frames. Sin persistencia (`SharedPreferences`/secure storage/disco), sin exposición de `objectKey`. **Status: RESOLVED, PHYSICAL RETEST PASS** (`CROSS-APP-R4.3F`, 7/7 tests físicos de estabilidad/visor, y reconfirmado en el smoke físico final `MAIN-PHYSICAL-SMOKE-PASS`). Ver `decisiones.md`.
+
+## Baseline `main`@`5c4f0f9` (CROSS-APP-R4.3, ya fusionado)
+
+`flutter analyze` limpio, **196/196 tests, todos en verde** (181→196 sobre el baseline previo de `main`@`91357d17`) — validado sobre `test/r4-ride-identities` (2026-08-18) y re-confirmado sin cambios de código tras el fast-forward a `main`. Confirmado además por `MAIN-PHYSICAL-SMOKE-PASS` de JuanJo (smoke físico final, 7/7). **Este es ahora el baseline oficial de `main`.** `test/r4-ride-identities` eliminada local y remotamente tras el cierre.
+
+## Problemas visibles en commits recientes
+
+- El commit `e0e3cff` ("fix: harden passenger fare negotiation") y
+  `95ed192` ("fix: harden passenger session recovery") indican que
+  hubo bugs previos de robustez en negociación de tarifa y
+  recuperación de sesión que ya fueron corregidos en este historial —
+  no quedan issues abiertos conocidos asociados a ellos en el repo
+  (no hay tracker de issues local).
+
+## Notas de alcance de esta verificación
+
+- No se ejecutó `flutter build apk`/`appbundle` completo (fuera de
+  alcance de esta documentación; no se instalaron toolchains
+  adicionales).
+- No se ejecutó la app en un emulador/dispositivo real; los hallazgos
+  de esta sección provienen de lectura de código, `flutter analyze` y
+  `flutter test` únicamente.
