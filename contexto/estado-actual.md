@@ -1,7 +1,7 @@
 # TukiTuki — Estado del proyecto
 
 Última actualización:
-2026-08-20
+2026-08-24
 
 Estado:
 ACTIVO
@@ -42,9 +42,11 @@ hecho vigente, remitiendo al historial para el detalle.
 | Backend | `tukituki-backend` | `main` | `29fe187aa31f5aad2db20ecd49534a218b358ab6` (`29fe187a`) |
 | Admin Web | `tukituki-admin-web` | `main` | `989ffc42faef5788c18455993d2462285b4db18d` (`989ffc42`) |
 | Driver | `tukituki-driver-app` | `main` | `2743274900ef33374a76606b62ff841d476c232f` (`2743274`) |
-| Passenger | `tukituki-passenger-app` | `main` | `7d717ff4b908dd1c0d5f932fca30c280b03b5f8f` (`7d717ff`) |
+| Passenger | `tukituki-passenger-app` | `main` | `421b18efe9b33e7cad9d6484cb03ae2aaab07234` (`421b18e`) |
 
 ✅ **Verificado (2026-08-20)** contra `git branch --show-current` + `git rev-parse HEAD` reales de los cuatro repos, working tree limpio en los cuatro. Backend y Admin Web coincidían con lo que ya estaba registrado; Driver y Passenger se actualizaron — ambos habían avanzado el mismo día con la fusión de `R4.4B` (ver `historial-checkpoints.md`).
+
+✅ **Passenger actualizado (2026-08-24, `DESIGN-SYSTEM-R1` — FINAL-CLOSED-ON-MAIN)**: fast-forward de `test/design-system-r1` → `main` (sobre `7d717ff`), publicado en `origin`. Sistema de diseño del pasajero implementado y validado físicamente bajo sol directo — ver sección 7 e `historial-checkpoints.md` para el detalle completo. Rama `test/design-system-r1` eliminada local y remotamente tras confirmar contención. `git status --short` limpio.
 
 El detalle de cómo se llegó a cada uno de estos commits (checkpoints,
 fast-forwards, smoke tests, limpieza de ramas) está en
@@ -104,8 +106,11 @@ Este comportamiento coincide exactamente con la decisión de producto de matchin
 - ✅ Cotización automática (`FareQuote`) + selección de destino + negociación de oferta en la pantalla Home (`home_screen.dart`).
 - ✅ Ciclo completo de seguimiento del viaje por polling (búsqueda, ofertas de conductores, asignación, PIN de inicio, recibo, calificación).
 - ✅ Recibo de viaje con desglose de tarifa y estado de pago.
+- ✅ **Sistema de diseño implementado en tres pantallas** (`DESIGN-SYSTEM-R1`, 2026-08-24, `FINAL-CLOSED-ON-MAIN`): tokens de marca (`PassengerColors`/`PassengerSpacing`/`PassengerTypography`), tipografía Manrope empaquetada como asset (ya no depende de Google Fonts en runtime), y dos componentes nuevos reutilizables (`GradientHeaderSheet`, `TukiTextField`). Login, Registro y Completar perfil migrados a estos tokens. El checkbox de aceptación de términos del registro se reemplazó por aceptación implícita al pulsar "Crear cuenta" (estándar de la industria; el Backend nunca esperó un campo de aceptación explícita). El splash intermedio entre registro/login y el resto del flujo ahora salta su delay de arranque en frío cuando se llega recién autenticándose, y usa una transición fade en vez del salto abrupto de color a pantalla completa. Validado físicamente por JuanJo en dispositivo real bajo sol directo. Ver `App-passenger/decisiones.md` y `historial-checkpoints.md` para el detalle completo.
 
 ### Pendiente
+
+- 🔴 **El resto de las pantallas del Passenger sigue sin migrar al sistema de diseño** — solo Login/Registro/Completar perfil están en `PassengerColors`/`PassengerTypography`/`PassengerSpacing`; el resto sigue con colores/tipografía definidos a mano por pantalla (ver `App-passenger/convenciones.md`, "Colores de UI: `static const Color _nombreColor` privados por pantalla"). Empezar por **`home_screen.dart`** (el mapa) — es la pantalla que el usuario ve a diario tras iniciar sesión, y hoy usa tipografía y colores fuera del sistema.
 
 - 🔴 "Has llegado a tu destino" con confirmación del Passenger al completar el Driver — no hay evidencia de esta pantalla/flujo en `App-passenger` (ver sección 13, no debe bloquear el cierre del Ride si el Passenger no confirma).
 - 🔴 Estado del viaje en background/pantalla bloqueada tipo navegación activa — no existe (la app solo actualiza en foreground vía `Timer.periodic`).
