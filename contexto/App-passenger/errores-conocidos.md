@@ -102,6 +102,19 @@ de trabajo pendiente (ver `passenger_ride.dart:72-83`,
   de un endpoint correspondiente en `AuthRepository`. Antes de
   conectarlo a algo real hace falta la pantalla/ruta y el endpoint de
   backend, ninguno de los cuales existe hoy.
+- **"Términos" y "Política de privacidad" no existen como documento,
+  ruta ni URL en ninguna parte del proyecto — pendiente legal antes de
+  salir al público** (`register_screen.dart`, `_TermsFootnote`,
+  agregado 2026-08-24 al quitar el checkbox de aceptación de términos
+  — ver `decisiones.md`): la nota al pie de "Crear cuenta" dice "Al
+  crear tu cuenta aceptas nuestros Términos y nuestra Política de
+  privacidad", y ambos enlaces responden al toque con un `SnackBar`
+  ("Pronto podrás leer nuestros términos" / "...nuestra política de
+  privacidad"), mismo patrón que "¿Olvidaste tu contraseña?" de
+  arriba. Búsqueda exhaustiva en el repo: no hay ningún archivo de
+  términos/política, ninguna ruta de la app que los muestre, ni
+  ninguna URL externa configurada — el texto le hace aceptar al
+  usuario documentos que hoy no existen en ningún lado.
 
 ## Discrepancia doc/código encontrada y corregida (checkpoint R4.2)
 

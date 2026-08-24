@@ -7,7 +7,7 @@ Branch analizada:
 main
 
 Última actualización:
-2026-08-15
+2026-08-24
 
 Fuente de verdad:
 Este documento es contexto auxiliar. Si contradice al código actual,
@@ -499,3 +499,106 @@ Evidencia:
 (patrón de referencia); `errores-conocidos.md`, sección "Pantallas que
 dependían del `ThemeData` por defecto" (los cuatro puntos activos que sí
 cambian de aspecto por herencia del `ColorScheme`, no de la fuente).
+
+---
+
+## Campo único de nombre en "Completa tu perfil" (en vez de nombre y apellido separados) — propuesta sin decidir
+
+Estado:
+PENDIENTE DE DECIDIR. Ningún código tocado; es una observación de
+producto surgida de revisar el registro de InDriver (2026-08-24),
+compartida con la propuesta de WhatsApp de abajo.
+
+Qué se propone:
+Reemplazar los dos campos actuales de "Completa tu perfil"
+(`firstName`/`lastName`) por un solo campo de nombre libre. El
+razonamiento: el Driver solo necesita saber a quién recoge, no un
+nombre legal completo separado en nombre y apellido.
+
+Por qué:
+Surge de comparar contra el registro de InDriver, que no separa
+nombre/apellido en ningún punto de su flujo.
+
+Qué falta para decidir:
+- Qué espera Backend hoy: `PassengerProfile` exige `firstName` y
+  `lastName` como no-nulos (ver entrada "Gate de identidad
+  obligatorio antes de Home" arriba,
+  `passenger-profile.entity.ts`) — pasar a un solo campo implica
+  cambiar Backend, no solo la app.
+- Qué muestra la app del Driver hoy con esos dos campos:
+  `displayCompactName(firstName, lastName)` en
+  `lib/core/display_name.dart` construye "Juan P." a partir de
+  ambos (consumido desde `CROSS-APP-R4.3`, ver entrada arriba); un
+  solo campo de nombre libre rompe ese formato o exige repensarlo.
+- Sin fecha ni owner asignado.
+
+Evidencia:
+Ninguna en código todavía. Referencias a revisar cuando se retome:
+`lib/features/passenger/presentation/complete_profile_screen.dart`;
+`lib/core/display_name.dart`; Backend
+`src/modules/passengers/entities/passenger-profile.entity.ts`.
+
+---
+
+## Código de verificación por WhatsApp como alternativa al SMS — propuesta sin evaluar
+
+Estado:
+PENDIENTE DE EVALUAR. Ningún código tocado; observación de producto
+surgida de la misma revisión del registro de InDriver (2026-08-24)
+que el punto anterior.
+
+Qué se propone:
+Ofrecer WhatsApp como canal alternativo (o reemplazo) del SMS para
+el código de verificación del registro.
+
+Por qué:
+En Tarapoto el SMS puede demorar o no llegar; WhatsApp es de uso
+prácticamente universal ahí.
+
+Qué falta para evaluar:
+Es un proyecto, no un ajuste — requiere la API de WhatsApp Business,
+aprobación de Meta, y plantillas de mensaje registradas y aprobadas.
+Sin evaluar costo ni tiempo todavía.
+
+Evidencia:
+Backend ya tiene un mecanismo de OTP construido para SMS
+(`auth/otp/request`, `auth/otp/verify` — ver entrada "Verificación
+de teléfono por OTP se volvió opcional en el registro" arriba:
+actualmente desconectado del flujo activo de la app, pero presente
+en código). Ninguna implementación de WhatsApp existe todavía.
+
+---
+
+## Contexto compartido: InDriver no usa contraseña — vale la pena revisar la arquitectura de auth de TukiTuki
+
+Estado:
+Nota de contexto para las dos propuestas de arriba, no una decisión
+de producto en sí misma. PENDIENTE DE EVALUAR.
+
+Qué se propone:
+El registro de InDriver es número de teléfono → código de
+verificación → nombre, sin contraseña en ningún punto. TukiTuki sí
+pide contraseña al registrarse (`RegisterScreen`,
+`RegisterPassengerDto.password` en Backend). Dado que Backend ya
+tiene el mecanismo de OTP construido (ver entrada de arriba, aunque
+hoy desconectado del flujo activo), vale la pena revisar más
+adelante si la contraseña sigue siendo necesaria o si TukiTuki
+podría migrar a un flujo solo-OTP como el de InDriver.
+
+Por qué:
+Surge de la misma revisión del registro de InDriver que originó las
+dos propuestas de arriba (campo de nombre único, verificación por
+WhatsApp) — se anota aquí como contexto compartido de ambas, no
+como una propuesta separada.
+
+Qué falta para evaluar:
+Sin evaluar. Implica repensar la arquitectura de autenticación
+completa (Backend + esta app), no solo la pantalla de registro.
+
+Evidencia:
+`lib/features/auth/presentation/register_screen.dart` (campo de
+contraseña); Backend
+`src/modules/auth/dto/register-passenger.dto.ts` (campo `password`
+obligatorio); Backend `auth/otp/request`/`auth/otp/verify` ya
+existen (ver entrada "Verificación de teléfono por OTP se volvió
+opcional en el registro" arriba).
