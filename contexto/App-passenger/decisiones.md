@@ -602,3 +602,105 @@ contraseña); Backend
 obligatorio); Backend `auth/otp/request`/`auth/otp/verify` ya
 existen (ver entrada "Verificación de teléfono por OTP se volvió
 opcional en el registro" arriba).
+
+---
+
+## `headerGrowthBudget` de `GradientHeaderSheet` se autolimita
+
+Estado:
+ACTIVA — comportamiento confirmado del código actual, verificado
+empíricamente migrando `complete_profile_screen.dart` (2026-08-24).
+
+Qué se decidió/observó:
+Subir `headerGrowthBudget` no hace crecer el header indefinidamente.
+`GradientHeaderSheet` fuerza `sheetMinHeight = totalHeight -
+headerMaxHeight` como piso de altura de la hoja; mientras el
+contenido real de `sheetChildren` sea más bajo que ese piso, el
+`Column` centra el sobrante como padding y el header queda pegado a
+`headerMaxHeight`. Pero en cuanto `headerMaxHeight` crece lo
+suficiente para que ese piso caiga por debajo de la altura natural
+del contenido, la hoja pasa a depender solo de su contenido — el
+`ConstrainedBox` deja de ser la restricción activa — y el header deja
+de crecer más allá de ese punto, sin importar cuánto se siga subiendo
+el budget. Es decir: por encima de cierto valor, seguir subiendo
+`headerGrowthBudget` es inofensivo (no hay riesgo de que el header
+termine tragándose toda la pantalla), pero tampoco sigue teniendo
+efecto.
+
+Confirmado migrando `complete_profile_screen.dart` (dos campos, poco
+contenido): con `headerGrowthBudget: 300` el residuo de la hoja bajó
+a ~7px lógicos (prácticamente cero) con un header de ~47% de la
+pantalla — evidencia de que ya se estaba cerca del punto de
+saturación, no de que siguiera creciendo proporcionalmente al budget.
+
+Por qué:
+Se infiere directamente de la implementación de `GradientHeaderSheet`
+(`sheetMinHeight`/`sheetMaxHeight` calculados a partir de
+`headerMinHeight`/`headerMaxHeight`, `Column` con
+`mainAxisAlignment.center` dentro de un `ConstrainedBox` con solo
+`minHeight`) — no hay comentario explícito en el widget que lo
+documente como comportamiento intencional, pero el mecanismo se
+verificó leyendo el código y confirmando el resultado en pantalla.
+
+Alternativas descartadas:
+Ninguna — es una observación sobre el comportamiento existente, no
+una decisión de diseño tomada en este checkpoint.
+
+Evidencia:
+`lib/core/widgets/gradient_header_sheet.dart` (`sheetMinHeight`,
+`sheetMaxHeight`, `Column(mainAxisAlignment: MainAxisAlignment.center)`
+dentro del `ConstrainedBox`); mediciones sobre
+`complete_profile_screen.dart` en `headerGrowthBudget` 24/150/180/300
+(2026-08-24).
+
+---
+
+## "Hoja ceñida al contenido" y "header de un tercio de pantalla" son objetivos incompatibles con poco contenido
+
+Estado:
+ACTIVA — decisión de diseño tomada para
+`complete_profile_screen.dart` (2026-08-24), documentada aquí porque
+aplica a cualquier pantalla futura que use `GradientHeaderSheet` con
+contenido corto.
+
+Qué se decidió:
+En una pantalla con `sheetChildren` cortos (p. ej. "Completa tu
+perfil", solo dos campos), no existe un valor de
+`headerGrowthBudget` que simultáneamente (a) deje el residuo de la
+hoja cerca de cero y (b) mantenga el header en aproximadamente un
+tercio de la pantalla — porque el punto en el que el residuo llega a
+cero está determinado únicamente por `altura total de pantalla −
+altura natural del contenido`, sin relación con qué tan "corto"
+debería verse el header. En `complete-profile`, ese punto de residuo
+cero cae con el header en ~47% de la pantalla (medido con
+`headerGrowthBudget: 300`) — muy por encima de un tercio.
+
+Se priorizó la proporción del header sobre cerrar el residuo:
+`headerGrowthBudget: 180` deja el header en ~34% de la pantalla con
+un residuo de ~113px lógicos en la hoja. Se descartó explícitamente
+llevar el residuo a cero, porque un header al 47% con el logo en su
+tamaño normal (92/150, igual que Login) se veía desbalanceado — el
+verde dominando la pantalla con el logo "perdido" en el centro.
+
+Por qué:
+Revisión visual física (JuanJo) tras migrar `complete_profile_screen.dart`:
+con `headerGrowthBudget: 24` (heredado de Register) la hoja tenía un
+hueco grande antes del indicador de pasos; con `headerGrowthBudget: 300`
+el hueco desapareció pero el header pasó a ocupar casi la mitad de
+la pantalla. `180` fue el mejor punto encontrado probando 120/150/180
+dentro del rango pedido.
+
+Alternativas descartadas:
+- Llevar el residuo a exactamente cero (`headerGrowthBudget` ~294,
+  header ~47%) — descartado por verse desbalanceado.
+- Achicar el logo en vez de agrandar el header — no ataca la causa
+  (el residuo viene de que el *contenido* de la hoja es corto, no de
+  que el logo sea grande) y esta pantalla, a diferencia de Register,
+  no compite por espacio con un tercer campo, así que no había razón
+  para mantener el logo chico.
+
+Evidencia:
+`lib/features/passenger/presentation/complete_profile_screen.dart`
+(`headerGrowthBudget: 180`, comentario junto a `GradientHeaderSheet`);
+mediciones en `headerGrowthBudget` 24/150/180/300 sobre APK de
+desarrollo sobre emulador (2026-08-24).
