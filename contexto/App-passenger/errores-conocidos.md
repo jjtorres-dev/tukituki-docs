@@ -92,6 +92,16 @@ de trabajo pendiente (ver `passenger_ride.dart:72-83`,
   quedar desactualizada hasta que vuelva la conexión; no hay
   indicador explícito de "sin conexión" distinto del mensaje de error
   genérico por pantalla.
+- **"¿Olvidaste tu contraseña?" existe en la UI pero no hay recuperación
+  de contraseña implementada** (`login_screen.dart`, agregado
+  2026-08-20 al migrar la pantalla al mockup): el enlace es visible,
+  respeta el estilo del mockup y responde al toque, pero solo muestra
+  un `SnackBar` ("Pronto podrás recuperar tu contraseña") — no navega a
+  ninguna pantalla ni llama a ningún endpoint. No existe flujo de
+  recuperación de contraseña en ningún punto del cliente ni evidencia
+  de un endpoint correspondiente en `AuthRepository`. Antes de
+  conectarlo a algo real hace falta la pantalla/ruta y el endpoint de
+  backend, ninguno de los cuales existe hoy.
 
 ## Discrepancia doc/código encontrada y corregida (checkpoint R4.2)
 
