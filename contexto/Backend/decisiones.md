@@ -469,6 +469,28 @@ Evidencia:
 
 ---
 
+## `ORIGIN-ADDRESS-R1`: endpoint liviano de reverse geocoding para la dirección de origen, con límite dedicado por usuario
+
+Estado:
+**FINAL-CLOSED-ON-MAIN.** Commit `06cad3f3` ("feat: add lightweight reverse geocoding endpoint for the origin address"), integrado a `main`@`06cad3f3` mediante fast-forward puro (2026-08-24). 90/90 test suites, 637/637 tests, lint limpio. `test/origin-address-r1` eliminada (local y remota) tras confirmar contención total en `main`.
+
+Qué se decidió:
+Nuevo `GET /fares/origin-address?latitude=..&longitude=..` en `FaresModule` (mismos guards de clase que el resto de `FaresController`: `JwtAuthGuard` + `RolesGuard(PASSENGER)`). Resuelve la dirección real de un punto GPS **sin generar un `FareQuote`** — reutiliza `GoogleGeocodingService.reverseGeocode(..., FALLBACK_ORIGIN_ADDRESS)`, el mismo servicio y el mismo fallback honesto que ya usa `origin` en cada cotización (`FaresService.estimate`). Existe para que Passenger pueda mostrar la dirección real del origen apenas obtiene el GPS, sin esperar a que el pasajero elija destino (ver la decisión equivalente en `docs/contexto/App-passenger/decisiones.md`).
+
+Límite dedicado por usuario (protección de costo):
+`OriginAddressService.resolve()` aplica un límite vía `RedisService.incrementWithTtl`, mismo patrón atómico que ya usa `OTP_REQUEST_IP_LIMIT`/`OTP_REQUEST_PHONE_LIMIT` (`otp.service.ts`), pero identificando la key directamente por `userId` (`fares:origin-address:user:${userId}`) — sin fingerprint HMAC, porque a diferencia del teléfono/IP, `userId` ya es un UUID interno opaco emitido por este mismo Backend, no un dato de contacto real. Env vars nuevas: `ORIGIN_ADDRESS_RATE_LIMIT_MAX` (default `30`) y `ORIGIN_ADDRESS_RATE_LIMIT_WINDOW_SECONDS` (default `3600`). Al superarse, `429`.
+
+Por qué un límite dedicado cuando `places/autocomplete` (el otro endpoint que paga a Google por llamada) no tiene uno:
+`places/autocomplete` se autolimita por la velocidad de tecleo humano; `origin-address` se dispara automáticamente en cuanto el cliente obtiene un GPS, sin ese freno natural — quedó registrado como candidato a la misma protección en `errores-conocidos.md`, sin arreglarlo en este checkpoint.
+
+Alternativas descartadas:
+Reutilizar el throttle global (`RATE_LIMIT_*`) sin límite dedicado, siguiendo el precedente de `places/autocomplete` al pie de la letra — descartado porque el patrón de disparo es distinto (ver arriba), y el objetivo explícito era acotar el costo por cuenta, no solo por IP (varios pasajeros pueden compartir NAT/red móvil).
+
+Evidencia:
+`src/modules/fares/dto/origin-address.dto.ts`, `src/modules/fares/origin-address.service.ts`, `src/modules/fares/origin-address.service.spec.ts`, `src/modules/fares/fares.controller.ts` (`getOriginAddress`), `src/config/env.validation.ts`, `.env.example`. Commit `06cad3f3`.
+
+---
+
 ## Identidad compacta de ride (`lastNameInitial`) en las cuatro DTO de participante, sin exponer apellido completo ni PII adicional
 
 Estado:

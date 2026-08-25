@@ -217,6 +217,8 @@ Reproducir el mismo tap repetido en un dispositivo físico o en un emulador con 
 Evidencia:
 `lib/features/home/home_screen.dart` (`_loadCurrentLocation`, `_moveCameraToCurrentLocation`, `_resolveOriginAddress`).
 
+**Actualización (`ORIGIN-ADDRESS-R1`, 2026-08-24): el guard de concurrencia de `fares/origin-address` ya está en `main`** (commit `afaadb4`, fast-forward de `test/origin-address-r1`). JuanJo reconfirmó en el emulador, con el guard puesto, que taps repetidos en "centrar en mi ubicación" ya no producen el freeze — la dirección se mantiene estable. Esto es consistente con la hipótesis de arriba (el ANR no dependía de la acumulación de llamadas a `fares/origin-address`, que era un bug real pero aparte): con ese bug corregido y el freeze ya sin reproducirse en el mismo emulador, la explicación más probable que queda en pie sigue siendo `animateCamera` contra `GoogleMap` en un emulador sin aceleración GPU. **Sigue sin probarse en un dispositivo físico** — no se cierra esta entrada hasta esa validación.
+
 ## Notas de alcance de esta verificación
 
 - No se ejecutó `flutter build apk`/`appbundle` completo (fuera de

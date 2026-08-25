@@ -674,6 +674,29 @@ Evidencia:
 
 ---
 
+## `ORIGIN-ADDRESS-R1`: dirección real del origen visible apenas hay GPS, con cache por distancia y guard de concurrencia (2026-08-24)
+
+Estado:
+**FINAL-CLOSED-ON-MAIN.** Dos commits, integrados a `main`@`afaadb4` mediante fast-forward puro (2026-08-24): `9b9322b` ("feat: show the real origin address as soon as GPS is available") y `afaadb4` ("fix: guard fares/origin-address against duplicate in-flight requests", agregado tras un ANR reportado en el emulador durante la validación — ver `errores-conocidos.md`). `flutter analyze` limpio, 217/217 tests. `test/origin-address-r1` eliminada (local y remota) tras confirmar contención total en `main`. Verificado en el emulador: la dirección real del origen aparece apenas hay GPS, sin esperar destino, y taps repetidos en "centrar en mi ubicación" ya no producen el freeze reportado inicialmente.
+
+Qué se decidió:
+`FareRepository.getOriginAddress()` llama a `GET fares/origin-address` (nuevo endpoint del Backend, ver `docs/contexto/Backend/decisiones.md`). `HomeScreen._loadCurrentLocation()` lo dispara en paralelo (`unawaited`) apenas resuelve un fix de GPS — independiente de la cotización, no espera a que el pasajero elija destino. La prioridad de qué texto se muestra como "Origen" queda: `quote.originAddress` (si ya hay cotización) → `_resolvedOriginAddress` (resuelto preemptivamente) → `'Esperando GPS...'`/`'Tu ubicación actual'` (interino).
+
+**Cache por distancia — `_originAddressCacheDistanceMeters = 50`** (constante nombrada y documentada, no un número suelto): si una nueva posición GPS cae dentro de 50 metros de la última posición para la que ya se resolvió una dirección, no se vuelve a llamar al backend — se reutiliza la dirección ya conocida. **Sin validar en calle todavía** — mismo estado que `_driverMarkerLargeJumpMetersThreshold` (300m, umbral de salto grande del marcador del Driver, `R4.4B`), que tampoco se probó en zona de señal GPS difícil. Ajustar si la prueba física muestra que 50m es muy chico (parpadea con jitter normal de GPS) o muy grande (no actualiza al moverse una cuadra corta).
+
+**Guard de concurrencia (agregado tras el ANR del emulador, ver `errores-conocidos.md`)**: el guard `_locating` ya existente solo serializa la parte de `_loadCurrentLocation` (fetch de GPS + `animateCamera`) — no cubre `_resolveOriginAddress`, que se lanza con `unawaited` y por lo tanto puede seguir en vuelo después de que `_locating` ya volvió a `false`. Sin un guard propio, taps repetidos antes de que la primera respuesta llegara acumulaban varias llamadas concurrentes a `fares/origin-address` para prácticamente el mismo punto (el cache por distancia no alcanzaba a filtrarlas, porque solo se actualizaba al recibir una respuesta exitosa). Fix: `_originAddressInFlightPosition` + `_originAddressInFlightRequestId`, marcados **al iniciar** la llamada (no al recibir la respuesta) y limpiados al terminar (éxito o fallo). Deliberadamente en un campo separado de `_resolvedOriginAddressPosition` (que solo se mueve en éxito): mezclarlos habría dejado el cache de "ya resuelto" apuntando a un punto cuya dirección nunca se obtuvo si la llamada fallaba, bloqueando reintentos futuros para ese mismo lugar.
+
+Por qué:
+Hoy la dirección real del origen solo aparecía después de elegir destino (llegaba dentro de la cotización); antes de eso el pasajero veía "Tu ubicación actual", que no confirmaba si el GPS había acertado. Objetivo de producto: mostrar la dirección real desde el primer momento. El guard de concurrencia se agregó después de que JuanJo reportó un ANR en el emulador al tocar repetidamente "centrar en mi ubicación" — la investigación (ver `errores-conocidos.md`) no confirmó que la acumulación de llamadas fuera la causa directa del ANR (las llamadas HTTP async no bloquean el hilo principal por sí solas), pero sí confirmó que era un bug real y desperdiciaba cupo del límite por usuario del Backend (`ORIGIN_ADDRESS_RATE_LIMIT_MAX`) — se corrigió independientemente de si terminaba siendo la causa del freeze.
+
+Alternativas descartadas:
+Extraer la fórmula de Haversine (`_originAddressDistanceMeters`) a un util compartido con `_driverMarkerDistanceMeters` (`ride_searching_screen.dart`, R4.4B) — descartado para no tocar ese código ya aprobado físicamente en un checkpoint cerrado; se duplicó deliberadamente en su lugar.
+
+Evidencia:
+`lib/features/fare/data/fare_repository.dart` (`getOriginAddress`), `lib/features/home/home_screen.dart` (`_resolveOriginAddress`, `_originAddressCacheDistanceMeters`, `_originAddressInFlightPosition`, `_originAddressInFlightRequestId`, `_originAddressDistanceMeters`), `test/features/home/home_screen_test.dart` (grupo `ORIGIN-ADDRESS-R1`, incluye el caso "varios taps rápidos sin moverse producen una sola llamada al repositorio"). Commits `9b9322b`, `afaadb4`.
+
+---
+
 ## "Hoja ceñida al contenido" y "header de un tercio de pantalla" son objetivos incompatibles con poco contenido
 
 Estado:
