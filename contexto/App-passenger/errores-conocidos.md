@@ -198,6 +198,25 @@ de marca explícitos (como ya tienen splash/login/register/ride_receipt)
 o si se dejan heredando del tema — pero ya heredando de los tokens de
 marca reales, no de un seed genérico.
 
+## ANR al tocar repetidamente "centrar en mi ubicación" en el emulador (2026-08-24, sin reproducir en físico todavía)
+
+Estado:
+PENDIENTE DE REPRODUCIR EN DISPOSITIVO FÍSICO — no confirmado como bug real de la app ni descartado como límite del emulador.
+
+Qué se observó:
+JuanJo reportó que tocar repetidamente el botón "Centrar en mi ubicación" de `home_screen.dart` en el emulador Android congeló la app ("TukiTuki Pasajero isn't responding"), durante la validación de `ORIGIN-ADDRESS-R1`.
+
+Causa más probable (por lectura de código):
+`_loadCurrentLocation()` llama a `_moveCameraToCurrentLocation()` → `GoogleMapController.animateCamera(...)`, un round-trip por canal de plataforma hacia la vista nativa de Google Maps. El guard `_locating` (`home_screen.dart`) sí serializa correctamente las llamadas a `_loadCurrentLocation` — no hay overlap ahí (confirmado por lectura: `_locating = true` se asigna de forma síncrona antes del primer `await`, y Dart no puede entrelazar dos invocaciones entre ese chequeo y esa asignación) — pero SÍ permite ciclos consecutivos rápidos uno tras otro si cada uno termina rápido, cada uno disparando su propio `animateCamera` nativo. Llamadas repetidas de `animateCamera` en sucesión rápida es una causa conocida de jank/ANR de `google_maps_flutter` en emuladores sin aceleración GPU real (Google Maps renderizado por software). Esta llamada y este flujo **ya existían antes de `ORIGIN-ADDRESS-R1`** (el checkpoint que agregó `GET fares/origin-address`) — no fueron introducidos por ese checkpoint.
+
+Se descartó como causa directa del ANR (aunque sí era un bug real aparte, ya corregido en la misma investigación): la acumulación de llamadas a `GET fares/origin-address` sin guard de "ya hay una en curso" — taps repetidos podían disparar varias llamadas concurrentes a ese endpoint nuevo antes de que la primera respondiera. Las llamadas HTTP de Dio son async/no bloquean el hilo principal de Android por sí solas, así que no explican un ANR (bloqueo del hilo principal) por sí mismas, aunque sí eran un desperdicio de cupo del rate limit del backend (`ORIGIN_ADDRESS_RATE_LIMIT_MAX`). Ese guard ya se agregó (`_originAddressInFlightPosition`/`_originAddressInFlightRequestId` en `home_screen.dart`), independientemente de si resulta ser o no la causa del ANR.
+
+Qué falta para confirmar:
+Reproducir el mismo tap repetido en un dispositivo físico o en un emulador con aceleración GPU confirmada. Si el freeze desaparece ahí, confirma que el mecanismo raíz es el emulador (probablemente sin aceleración GPU) y no un bug de la app. Si persiste en físico, es un bug real preexistente en el flujo de recentrado (`_moveCameraToCurrentLocation`), no introducido por `ORIGIN-ADDRESS-R1`, y ameritaría su propio checkpoint (p. ej. debounce del botón o límite de frecuencia de `animateCamera`).
+
+Evidencia:
+`lib/features/home/home_screen.dart` (`_loadCurrentLocation`, `_moveCameraToCurrentLocation`, `_resolveOriginAddress`).
+
 ## Notas de alcance de esta verificación
 
 - No se ejecutó `flutter build apk`/`appbundle` completo (fuera de
