@@ -655,6 +655,25 @@ dentro del `ConstrainedBox`); mediciones sobre
 
 ---
 
+## `G4B-CONTRACT-R1`: la app manda `destination.isManualSelection` explícito, ya no se infiere por texto (2026-08-24)
+
+Estado:
+**FINAL-CLOSED-ON-MAIN.** Commit `f31704a8863f323134eddcc25322d94e7d3eb2d5` ("feat: send explicit manual-selection flag for destination"), integrado a `main`@`f31704a` mediante fast-forward puro (2026-08-24). `flutter analyze` limpio, 211/211 tests. `test/g4b-contract-r1` eliminada (local y remota) tras confirmar contención total en `main`. Verificado en el emulador contra Backend STAGING: destino elegido en el mapa se resuelve a dirección real sin placeholder visible; destino elegido por búsqueda conserva nombre y dirección tal cual.
+
+Qué se decidió:
+`HomeScreen` agrega un estado local `_destinationIsManualSelection` (`bool`, `false` por defecto) que se pone en `true` únicamente cuando el destino se elige tocando el mapa (nunca por autocomplete/búsqueda), y en `false` en cualquier otro camino (autocomplete, reset). Esa bandera se manda a Backend como `destination.isManualSelection` en `FareRepository.getFareEstimate` (`fares/estimate`). La misma bandera reemplaza también la lectura local: antes, `HomeScreen` decidía si reemplazar la tarjeta por la dirección real resuelta por Backend comparando `_selectedDestinationAddress == _manualDestinationPlaceholder`; ahora usa directamente `_destinationIsManualSelection`. `_manualDestinationPlaceholder` (el literal `'Destino seleccionado en el mapa'`) se sigue mostrando en pantalla y enviando como `address` (Backend lo exige no vacío), pero ya no se compara contra nada como señal — ni en esta app ni en Backend, salvo en el fallback legado documentado del lado Backend.
+
+Por qué:
+Corresponde a la misma decisión de contrato tomada del lado Backend (ver `docs/contexto/Backend/decisiones.md`, entrada `G4B-CONTRACT-R1`): la señal de "destino elegido en el mapa" pasa de inferirse por comparación de texto contra un literal de copy de UI a ser un campo explícito del contrato, para no depender de que ambos repos mantengan ese literal sincronizado en silencio.
+
+Condición de retiro del fallback legado (vive del lado Backend, no de esta app):
+El Backend conserva temporalmente la comparación de texto como fallback solo para clientes que omitan `isManualSelection` — es decir, la única instalación pre-contrato (un APK de prueba en el celular físico de JuanJo, sin distribución pública). Se retira en cuanto esa instalación se reinstale con una build de esta app que ya incluya este commit (`f31704a` en adelante). No aplica ninguna acción futura de este lado más allá de asegurar que esa reinstalación ocurra.
+
+Evidencia:
+`lib/features/fare/data/fare_repository.dart` (`destinationIsManualSelection`), `lib/features/home/home_screen.dart` (`_destinationIsManualSelection`), `test/features/home/home_screen_test.dart`. Commit `f31704a`.
+
+---
+
 ## "Hoja ceñida al contenido" y "header de un tercio de pantalla" son objetivos incompatibles con poco contenido
 
 Estado:

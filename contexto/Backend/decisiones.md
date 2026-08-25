@@ -445,6 +445,30 @@ Evidencia:
 
 ---
 
+## `G4B-CONTRACT-R1`: bandera explícita `isManualSelection` reemplaza la detección por texto exacto en el contrato de estimación de tarifa
+
+Estado:
+**FINAL-CLOSED-ON-MAIN.** Commit `aec51b42083eb7ce5ea65011b9019f92b30be09b` ("feat: add explicit manual-selection flag to fare estimate contract"), integrado a `main`@`cc4888af` mediante fast-forward puro (2026-08-24), seguido de un commit de formato (`cc4888af`, línea de test que excedía el ancho de Prettier — detectado por `lint:check` sobre `main` antes de publicar, corregido con `npm run lint --fix`). 89/89 test suites, 631/631 tests, lint limpio. `test/g4b-contract-r1` eliminada (local y remota) tras confirmar contención total en `main`.
+
+Qué se decidió:
+`FareEstimateLocationDto` gana un campo opcional `destination.isManualSelection: boolean` (`IsOptional`, `IsBoolean`). En `FaresService.estimate`, la señal para decidir si `destination` debe resolverse por reverse geocoding pasa a ser `isManualSelection === true`, en vez de comparar `destination.address` contra el literal hardcodeado `'Destino seleccionado en el mapa'` (`MANUAL_DESTINATION_PLACEHOLDER`). `origin` no se ve afectado — siempre se resuelve por reverse geocoding, sin condición, igual que antes.
+
+Fallback legado (temporal, con condición de retiro explícita):
+Cuando `isManualSelection` viene **ausente** (cliente pre-contrato), `FaresService` cae en el comportamiento anterior: compara `address` contra `MANUAL_DESTINATION_PLACEHOLDER`. Un cliente que mande `isManualSelection: false` de forma explícita **nunca** cae en este fallback, aunque su `address` coincida por casualidad con el literal legado — la bandera explícita siempre gana sobre el texto cuando está presente.
+
+**Condición de retiro del fallback** (no depende de fecha): retirar `MANUAL_DESTINATION_PLACEHOLDER`, su uso en `requiresDestinationGeocoding` y el test que lo cubre en `fares.service.spec.ts` en cuanto se confirme que la única instalación pre-contrato (un APK de prueba en el celular físico de JuanJo, sin distribución pública — ver la decisión equivalente en `docs/contexto/App-passenger/decisiones.md` y `docs/contexto/App-passenger/errores-conocidos.md`) fue reinstalada con una build que ya envía `isManualSelection`.
+
+Por qué:
+La detección anterior por comparación de texto exacto contra un literal de copy de UI (`home_screen.dart` del lado Passenger) quedaba desincronizada en silencio si la app cambiaba ese copy sin tocar el Backend — un acoplamiento implícito entre dos repos sin contrato explícito que lo garantizara. `G4B-CONTRACT-R1` reemplaza esa heurística de texto por un campo de contrato explícito y tipado.
+
+Alternativas descartadas:
+Exigir `isManualSelection` como campo obligatorio desde el primer commit — descartado porque habría roto la única instalación existente sin el campo (el APK de prueba mencionado arriba) hasta que se reinstalara; se prefirió opcional con fallback temporal y acotado en vez de forzar un reinstall inmediato.
+
+Evidencia:
+`src/modules/fares/dto/fare-estimate-location.dto.ts`, `src/modules/fares/fares.service.ts` (`requiresDestinationGeocoding`, comentario "LEGACY FALLBACK (G4B-CONTRACT-R1)"), `src/modules/fares/fares.service.spec.ts`. Commit `aec51b42`.
+
+---
+
 ## Identidad compacta de ride (`lastNameInitial`) en las cuatro DTO de participante, sin exponer apellido completo ni PII adicional
 
 Estado:
