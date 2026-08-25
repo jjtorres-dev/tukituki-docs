@@ -491,6 +491,27 @@ Evidencia:
 
 ---
 
+## `SUGGESTED-DESTINATIONS-R1`: coordenadas del destino expuestas en el historial de pasajero
+
+Estado:
+**FINAL-CLOSED-ON-MAIN.** Commit `540153ff` ("feat: expose destination coordinates in passenger ride history"), integrado a `main`@`540153ff` mediante fast-forward puro (2026-08-24). 90/90 test suites, 638/638 tests, lint limpio. `test/suggested-destinations-r1` eliminada (local y remota) tras confirmar contención total en `main`.
+
+Qué se decidió:
+`PassengerRideHistoryItemDto` (`GET passenger/rides/history`) gana `destinationLatitude`/`destinationLongitude` (`number | null`, opcionales), seleccionadas en `RideHistoryService.getPassengerHistory` con `ST_Y(ride.destination_position::geometry)`/`ST_X(...)` — mismo patrón ya usado en `admin-rides.service.ts` para exponer coordenadas de un `geography` Point por SQL crudo. Solo el lado pasajero del historial las expone; `getDriverHistory` no las necesita para este checkpoint.
+
+**Verificado explícitamente que no existen viajes sin estas coordenadas**: `Ride.destinationPosition` es `geography NOT NULL` desde `1784766330109-CreateFareQuotesAndRides.ts`, la migración que creó la tabla — nunca se agregó después ni se relajó su nulidad, así que ningún ride, sin importar antigüedad, carece de ella. Los campos igual quedaron opcionales/nullable en el DTO, a pedido explícito de producto, como defensa ante cualquier fila futura o dato corrupto que no la tenga — no porque el caso exista hoy.
+
+Por qué:
+Motivado por el diseño de destinos sugeridos del lado Passenger (ver `docs/contexto/App-passenger/decisiones.md`, misma entrada): sin coordenadas, mostrar un destino del historial como sugerencia tocable habría exigido re-resolver el texto de `destinationAddress` vía Places (`autocomplete` + `getDetails`, dos llamadas a Google) cada vez que el pasajero tocara una sugerencia — y sin garantía de llegar al mismo lugar exacto que generó ese texto. Eso es lo grave: el pasajero toca "UPEU" y podría terminar fijando un punto distinto. Exponer las coordenadas ya calculadas elimina ambos problemas de raíz: cero llamadas nuevas a Google al tocar, y el punto es exactamente el mismo que el del viaje original.
+
+Alternativas descartadas:
+Dejar que el cliente re-resuelva el texto vía `places/autocomplete`+`getDetails` al tocar una sugerencia — es lo que se iba a implementar antes de decidir tocar Backend; descartado explícitamente por el riesgo de inexactitud y el costo de dos llamadas por toque, ambos evitables con datos que Backend ya tenía en PostGIS.
+
+Evidencia:
+`src/modules/rides/dto/passenger-ride-history-response.dto.ts`, `src/modules/rides/ride-history.service.ts` (`getPassengerHistory`), `src/modules/rides/ride-history.service.spec.ts`. Commit `540153ff`.
+
+---
+
 ## Identidad compacta de ride (`lastNameInitial`) en las cuatro DTO de participante, sin exponer apellido completo ni PII adicional
 
 Estado:

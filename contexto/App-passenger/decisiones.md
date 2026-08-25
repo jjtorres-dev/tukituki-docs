@@ -697,6 +697,34 @@ Evidencia:
 
 ---
 
+## `SUGGESTED-DESTINATIONS-R1`: destinos sugeridos en Home a partir del historial de viajes (2026-08-24)
+
+Estado:
+**FINAL-CLOSED-ON-MAIN.** Commit `777ca05` ("feat: show suggested destinations in Home from ride history"), integrado a `main`@`777ca05` mediante fast-forward puro (2026-08-24). `flutter analyze` limpio, 238/238 tests. `test/suggested-destinations-r1` eliminada (local y remota) tras confirmar contención total en `main`. Verificado en el emulador **solo el caso de historial vacío**: no aparecen sugerencias y la pantalla se comporta normal — ver `errores-conocidos.md` para lo que sigue pendiente con historial real.
+
+Qué se decidió:
+`RideRepository.getHistory({status: 'COMPLETED', limit: 50})` consume `GET passenger/rides/history` (antes nunca invocado desde esta app). `HomeScreen` lo pide una sola vez en `initState`, en paralelo, sin depender del GPS y sin persistir nada — se recalcula fresco cada vez que se monta una `HomeScreen` nueva.
+
+`resolveSuggestedDestinations()` (`lib/features/home/domain/suggested_destinations.dart`, función pura sin `BuildContext`) calcula hasta `suggestedDestinationsCount` (constante nombrada, valor `2`, igual que InDriver) destinos por **frecuencia dentro de la ventana recibida — no recencia pura**: un lugar visitado varias veces le gana a uno visitado una sola vez más recientemente, con empate resuelto por el más reciente de los dos. No confía en que `history` venga ordenado — compara `requestedAt` explícitamente. Deduplica por `destinationAddress` normalizada (`trim` + minúsculas) y filtra los literales de fallback del Backend (`'Destino seleccionado'`, `'Destino seleccionado en el mapa'` — no son direcciones reales, sugerirlas no tiene sentido).
+
+Al tocar una sugerencia (`_selectSuggestedDestination`): mismo camino que `_selectPlacePrediction` a partir de fijar el destino (mover cámara, `_maybeAutoEstimateFare()`), pero usando `destinationLatitude`/`destinationLongitude` del historial directamente — **sin `places/autocomplete` ni `getDetails`**, cero llamadas nuevas a Google, sin riesgo de resolver a un lugar distinto del tocado. La pastilla queda deshabilitada (sin `onTap`, atenuada) mientras `_currentPosition == null` — tocarla antes fijaría el destino igual, pero la cotización no dispara sin origen, así que se evita mostrar un control activo que no hace nada visible todavía.
+
+Caso vacío (sin historial o sin destinos que pasen los filtros): la sección de sugerencias no se muestra — ni mensaje ni espacio reservado, mismo criterio que el resto de los enriquecimientos best-effort de esta pantalla. Un fallo de red al pedir el historial se trata igual (oculta, `debugPrint`, no bloquea nada).
+
+**Limitación conocida, documentada en el propio código (`suggested_destinations.dart`), sin solución sin cambiar Backend**: el dedup por texto puede tratar como distintos dos formatos de la misma dirección (p. ej. con/sin ciudad) — no hay `placeId` ni coordenadas de origen suficientemente estables persistidas en el historial para deduplicar de forma más robusta.
+
+Por qué:
+El alcance original de esta tarea era solo la app (el endpoint de historial ya existía, pero sin coordenadas de destino). Se decidió tocar también Backend (ver `docs/contexto/Backend/decisiones.md`, misma entrada) porque resolver el texto vía Places al tocar una sugerencia costaba dos llamadas a Google por toque y, más grave, no garantizaba llegar exactamente al mismo lugar que generó ese texto — el pasajero tocaría "UPEU" y podría terminar fijando un punto distinto. Exponer las coordenadas ya calculadas en PostGIS elimina ambos problemas de raíz.
+
+Alternativas descartadas:
+- Recencia pura (los N destinos distintos más recientes) en vez de frecuencia — descartada: un viaje aislado de ayer no debería opacar un destino recurrente como el campus universitario, que es el caso de uso real que motivó esta función.
+- Resolver coordenadas al tocar vía `places/autocomplete`+`getDetails` (el plan original, antes de decidir tocar Backend) — descartada por el costo y el riesgo de inexactitud ya explicados.
+
+Evidencia:
+`lib/features/ride/domain/ride_history_item.dart`, `lib/features/ride/data/ride_repository.dart` (`getHistory`), `lib/features/home/domain/suggested_destinations.dart`, `lib/features/home/home_screen.dart` (`_loadSuggestedDestinations`, `_selectSuggestedDestination`, `_buildSuggestedDestinationChip`). Tests: `ride_history_item_test.dart`, `suggested_destinations_test.dart`, `ride_repository_test.dart`, `home_screen_test.dart` (grupo `SUGGESTED-DESTINATIONS-R1`). Commit `777ca05`.
+
+---
+
 ## "Hoja ceñida al contenido" y "header de un tercio de pantalla" son objetivos incompatibles con poco contenido
 
 Estado:

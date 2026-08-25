@@ -219,6 +219,22 @@ Evidencia:
 
 **Actualización (`ORIGIN-ADDRESS-R1`, 2026-08-24): el guard de concurrencia de `fares/origin-address` ya está en `main`** (commit `afaadb4`, fast-forward de `test/origin-address-r1`). JuanJo reconfirmó en el emulador, con el guard puesto, que taps repetidos en "centrar en mi ubicación" ya no producen el freeze — la dirección se mantiene estable. Esto es consistente con la hipótesis de arriba (el ANR no dependía de la acumulación de llamadas a `fares/origin-address`, que era un bug real pero aparte): con ese bug corregido y el freeze ya sin reproducirse en el mismo emulador, la explicación más probable que queda en pie sigue siendo `animateCamera` contra `GoogleMap` en un emulador sin aceleración GPU. **Sigue sin probarse en un dispositivo físico** — no se cierra esta entrada hasta esa validación.
 
+## Destinos sugeridos (`SUGGESTED-DESTINATIONS-R1`) — solo verificado el caso vacío, falta verificación visual con historial real
+
+Estado:
+PENDIENTE DE VERIFICACIÓN VISUAL. El checkpoint está `FINAL-CLOSED-ON-MAIN` (629→777ca05, ver `decisiones.md`) con `flutter analyze` limpio y 238/238 tests en verde, pero eso cubre la lógica (widget tests con historial simulado vía fakes) — no reemplaza ver la funcionalidad real contra una cuenta con historial real en STAGING.
+
+Qué se validó:
+JuanJo confirmó en el emulador el **caso de historial vacío**: una cuenta sin viajes `COMPLETED` no muestra ninguna sugerencia y el resto de la pantalla Home se comporta normal (sin espacio reservado, sin mensaje, sin romper nada). Al momento de este checkpoint, la cuenta de prueba usada no tenía viajes `COMPLETED` en STAGING — generarlos requiere completar el ciclo de vida completo de un ride (con un conductor, real o vía llamadas directas a la API) y no se hizo antes de fusionar.
+
+Qué falta verificar cuando exista una cuenta con historial real:
+- Aspecto visual de las pastillas de sugerencia (`_buildSuggestedDestinationChip`) — truncado de direcciones largas, espaciado, cómo se ven dos chips juntos.
+- Que tocar una sugerencia efectivamente fije el destino, dibuje la ruta y dispare la cotización — la lógica está cubierta por test (`home_screen_test.dart`, grupo `SUGGESTED-DESTINATIONS-R1`), pero no se probó contra el backend real de STAGING.
+- Que el orden por frecuencia se vea correcto con datos reales (un destino visitado varias veces apareciendo antes que uno visitado una sola vez).
+
+Evidencia:
+`lib/features/home/home_screen.dart` (`_buildSuggestedDestinationChip`, `_selectSuggestedDestination`); `docs/contexto/App-passenger/decisiones.md`, entrada `SUGGESTED-DESTINATIONS-R1`.
+
 ## Notas de alcance de esta verificación
 
 - No se ejecutó `flutter build apk`/`appbundle` completo (fuera de
