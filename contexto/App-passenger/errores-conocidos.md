@@ -274,3 +274,41 @@ Se ejecutó `dart format` sobre el archivo completo, tocando métodos de
 otros checkpoints. No cambia el comportamiento, pero aproximadamente
 780 registros del diff son solo whitespace y dificultan revisar el
 historial de ese archivo.
+
+## Estado "cotización vencida" nunca validado visualmente
+
+Estado:
+PENDIENTE DE VERIFICACIÓN VISUAL. Encontrado durante `HOME-DESIGN-R1-PARCIAL`
+(2026-08-26) al intentar confirmar en emulador el color corregido de
+ese texto (`textoSecundarioSobreOscuro`, ver `decisiones.md`).
+
+Qué se observó:
+`_scheduleQuoteExpiryTimer` (`home_screen.dart`) programa un `Timer`
+con la duración exacta hasta que la cotización vence; al disparar,
+llama directo a `_estimateFare()` y renueva la cotización sola — el
+Passenger nunca ve un botón manual para renovarla. En la práctica,
+esto significa que el texto/estado "Cotización vencida" está diseñado
+para **autocorregirse en el mismo instante en que aparecería**, con
+red funcionando. Cortar la red (modo avión) no ayuda a verlo: el mismo
+`Timer` dispara igual, `_estimateFare()` falla por falta de conexión,
+y la tarjeta se reemplaza por "No se pudo conectar" en vez de mostrar
+el estado vencido.
+
+Qué falta para confirmar:
+No se ha visto en pantalla real el texto "Cotización vencida" con su
+color corregido. Dos caminos identificados, ninguno ejecutado todavía:
+- Un test de widget (posiblemente con captura vía `matchesGoldenFile`)
+  que fuerce ese estado con un `FareRepository` fake cuyo
+  `estimateRide()` nunca resuelva, para que el `Timer` de renovación
+  quede "colgado" a mitad de camino sin reemplazar la tarjeta.
+- Adelantar el reloj del sistema del emulador más allá de la hora de
+  vencimiento (el `Timer` de Dart corre sobre el reloj monotónico, no
+  sobre la hora de pared, así que no debería dispararse antes de
+  tiempo solo por adelantar la fecha) y disparar un `setState`
+  cualquiera (p. ej. escribir en el campo de precio) para que la UI
+  recalcule el estado con la hora adelantada.
+
+Evidencia:
+`lib/features/home/home_screen.dart` (`_scheduleQuoteExpiryTimer`,
+`_isQuoteExpired`); `docs/contexto/App-passenger/decisiones.md`,
+entrada `HOME-DESIGN-R1-PARCIAL`.

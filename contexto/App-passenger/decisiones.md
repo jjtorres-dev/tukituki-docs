@@ -957,3 +957,123 @@ Evidencia:
 `lib/core/theme/passenger_typography.dart`. `docs/contexto/sistema-de-diseno.md`
 (secciones 2, 3, 4 y 5, marcado `[R2]`). `flutter analyze` limpio,
 242/242 tests en verde antes y después de la fusión a `main`.
+
+---
+
+## `HOME-DESIGN-R1-PARCIAL` — migración de colores de Home + `TukiSearchBar`, sin tipografía ni medidas (2026-08-26)
+
+Estado:
+**FINAL-CLOSED-ON-MAIN.** Rama `test/home-design-r1`, tres commits
+(`eea548b`, `6b2b743`, `ce3680a`), integrada a `main`@`ce3680a91055dcaf913b4d9704a6b74877694cfe`
+mediante fast-forward puro. `flutter analyze` limpio, 249/249 tests en
+verde (242 baseline + 7 de `TukiSearchBar`). Rama eliminada local y
+remotamente tras confirmar contención total.
+
+Qué se decidió:
+
+**Eliminar los íconos decorativos de los chips de métricas y del
+reloj de vigencia de cotización.** Dos razones convergentes, no una
+sola: (1) fallaban el mínimo de contraste de WCAG sobre `verdeMarca`
+— el ícono de cada chip (`acento` sobre el overlay translúcido del
+chip) daba 2.33:1, un umbral de 3:1 exigido para elementos gráficos;
+el ícono de reloj (`aviso` sobre `verdeMarca`) daba 2.90:1; (2) no
+aportaban información que el texto que los acompaña no diera ya
+("3.2 km" ya dice que es distancia sin un ícono de ruta al lado). La
+referencia de InDriver, revisada como parte de esta decisión, tampoco
+usa íconos en ese lugar. Los tres textos se conservaron sin cambio de
+posición ni tamaño.
+
+**El chevron de la etiqueta del marcador SÍ se conservó, recoloreado
+a `blanco` (12.5:1, no `acento`).** No es decoración — es el
+afordance que indica que la etiqueta es tocable para ajustar el punto
+de recogida; sin él nadie descubre esa función. Es la única excepción
+a la regla de "eliminar lo que falla contraste": acá el elemento sí
+aporta información (affordance de interacción), así que se corrige el
+color en vez de quitarlo.
+
+**`acento` (`#1F7A3E`) no debe usarse sobre `verdeMarca`.** Confirmado
+por cálculo de contraste WCAG (luminancia relativa, no impresión
+visual): 2.33:1 contra `verdeMarca` puro, y **peor todavía, 1.61:1**,
+contra el fondo real compuesto de los chips (`verdeMarca` con un
+overlay blanco al 12% de opacidad encima) — el overlay aclara el
+fondo hacia un tono más cercano a la propia luminancia de `acento`,
+así que en vez de ayudar, empeora el contraste real. Para texto o
+íconos sobre fondo oscuro, el sistema ya tiene `textoTenueSobreOscuro`
+(`#8FA891`, 4.87:1) y `textoSecundarioSobreOscuro` (`#B9C8BC`, 7.17:1)
+— ninguno de los dos es `acento`.
+
+**Consecuencia sobre `aviso`**: con el ícono de reloj eliminado y el
+texto de "cotización vencida" movido a `textoSecundarioSobreOscuro`,
+`aviso` quedó con un solo uso en toda la app — el ícono de la caja
+"sin ubicación", sobre `crema` (4.10:1, pasa cómodo). Se descartó
+partirlo en dos tokens (uno para fondo claro, otro para oscuro) porque
+ya no hace falta: no queda ningún uso sobre fondo oscuro que resolver.
+Se le quitó la marca de "provisional" en `passenger_colors.dart` y en
+`sistema-de-diseno.md`.
+
+**Encontrado durante la Etapa 1, no en la auditoría original**:
+`_secondaryGreen` (el color de la línea de ruta sobre el mapa) **no
+era código muerto** — una auditoría previa lo había dado por no
+renderizado; se verificó línea por línea que sigue coloreando la
+polyline real (`GoogleMap(polylines: _polylines)`) cada vez que hay
+una cotización con ruta. Se le dio token propio, `lineaRuta`
+(`#5C8A17`, sin cambio de valor), en una categoría nueva del sistema
+("Superposición sobre el mapa") en vez de forzarlo a `acento` — ver
+`sistema-de-diseno.md`.
+
+**Corrección de rol no pedida explícitamente**: la caja de "sin
+ubicación" usaba `destino` (el color del pin de destino) antes de
+este checkpoint. Se migró a `aviso`/`fondoAviso` en vez de a `destino`
+1:1 — es exactamente el caso que motivó crear `aviso` en
+`DESIGN-SYSTEM-R2` (evitar mezclar "esto es el pin de destino" con
+"esto necesita tu atención"), así que perpetuarlo con `destino` habría
+vaciado de sentido al token nuevo.
+
+Alcance deliberadamente parcial:
+
+**Tipografía y medidas de `home_screen.dart` NO se migraron.**
+Decisión explícita de JuanJo: Home va a reestructurarse en el
+rediseño de flujo que sigue a este checkpoint, y migrar tamaño y
+tipografía de una pantalla que va a cambiar de forma habría sido
+trabajo duplicado. `home_screen.dart` sigue sin importar
+`PassengerTypography` — todo su texto sigue en la fuente por defecto,
+igual que antes de este checkpoint.
+
+Por qué:
+
+Plan de 5 etapas aprobado por JuanJo antes de escribir código (colores
+→ tipografía → medidas → limpieza de código muerto), pensado para
+poder aislar una regresión física sin deshacer trabajo si algo se
+rompía en el mapa (mismo mecanismo que causó el bug que corrigió
+`HOME-LAYOUT-R1`: la altura medida de la hoja alimenta el padding del
+mapa y el reencuadre de cámara). Solo se autorizaron y ejecutaron las
+etapas 0 y 1; las etapas 2-4 (tipografía, medidas, limpieza) quedaron
+sin empezar cuando JuanJo decidió priorizar el rediseño de flujo antes
+de seguir.
+
+Alternativas descartadas:
+
+- Forzar el color de los tres íconos decorativos en vez de quitarlos
+  (p. ej. a `blanco`) — descartada porque, a diferencia del chevron,
+  no aportaban información nueva; quitarlos es más simple que
+  recolorearlos sin necesidad.
+- Partir `aviso` en dos tokens (claro/oscuro) — descartada porque, tras
+  quitar el único uso sobre fondo oscuro, ya no había un segundo
+  contexto que resolver.
+- Migrar `_secondaryGreen` a `acento` — descartada explícitamente por
+  JuanJo: es un color validado contra el mapa real, no contra la
+  paleta de interfaz; forzarlo a `acento` lo habría oscurecido sin
+  probar ese cambio en calle.
+- Migrar la caja de "sin ubicación" a `destino` 1:1, siguiendo la
+  regla general de "los que tienen token exacto migran 1:1" — descartada
+  por la razón de rol explicada arriba.
+
+Evidencia:
+`tukituki-passenger-app`, rama `test/home-design-r1`, commits
+`eea548b` (TukiSearchBar), `6b2b743` (colores), `ce3680a` (corrección
+de contraste); `lib/core/theme/passenger_colors.dart`,
+`lib/core/widgets/tuki_search_bar.dart`,
+`test/core/widgets/tuki_search_bar_test.dart`,
+`lib/features/home/home_screen.dart`.
+`docs/contexto/sistema-de-diseno.md` (sección 2, nota de `aviso`
+actualizada). `flutter analyze` limpio, 249/249 tests en verde.
