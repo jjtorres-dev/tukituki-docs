@@ -7,7 +7,7 @@ Branch analizada:
 main
 
 Última actualización:
-2026-08-24
+2026-08-26
 
 Fuente de verdad:
 Este documento es contexto auxiliar. Si contradice al código actual,
@@ -774,3 +774,76 @@ Evidencia:
 (`headerGrowthBudget: 180`, comentario junto a `GradientHeaderSheet`);
 mediciones en `headerGrowthBudget` 24/150/180/300 sobre APK de
 desarrollo sobre emulador (2026-08-24).
+
+---
+
+## `HOME-LAYOUT-R1` — layout definitivo de Home y geometría del mapa (2026-08-26)
+
+Estado:
+**PUBLICADO EN RAMA, PENDIENTE DE FUSIÓN A `main`.** Implementado en
+`test/home-layout-r1`@`a79abba22e33e0fa9af48ab82bfe90204a2736e7`,
+verificado y aprobado por JuanJo en emulador. No queda ningún pendiente
+funcional dentro del checkpoint; su integración a `main` requiere una
+autorización posterior.
+
+### Altura del marcador como constante única
+
+La altura lógica del marcador de origen (`64`) vive en un solo lugar:
+`_originMarkerLogicalSize.height`. Ese mismo valor alimenta tanto
+`BitmapDescriptor.asset` como el desplazamiento de la etiqueta, al que
+se suman `6` px lógicos de separación visual.
+
+Motivo: el bug original fue tener ese número duplicado y desincronizado
+del asset real mediante `_originMarkerIconHeight = 44`, valor heredado
+del pin por defecto de Google. Si alguien vuelve a escribir la altura a
+mano en dos sitios, el bug regresa.
+
+### Reencuadre sincronizado con la medición real
+
+El ajuste de cámara se dispara cuando la hoja reporta su nueva altura
+medida y se programa post-frame, agrupando cambios consecutivos de
+geometría. Ya no depende de un retraso fijo.
+
+Antes había `120 ms` fijos, que eran una carrera contra el layout, no
+una solución: si el padding todavía correspondía a la hoja pequeña, la
+cámara encuadraba con geometría vieja y el origen quedaba oculto.
+
+### El reencuadre se dispara por cotización, no por sesión
+
+Una cotización nueva siempre reencuadra, aunque el usuario haya movido
+el mapa antes. Un cambio de altura sin cotización nueva —por ejemplo,
+el teclado— no reencuadra si el usuario ya movió el mapa manualmente
+después del último encuadre automático.
+
+La operación está protegida por generación de destino/cotización para
+que una respuesta tardía no mueva la cámara.
+
+### Margen de encuadre: 48 px
+
+El margen de `newLatLngBounds` queda fijado en `48` px lógicos. Se
+eligió deliberadamente por debajo de valores mayores porque los viajes
+típicos son urbanos y cortos —menos de 1 km—: un margen amplio aleja
+tanto la cámara que se pierde el detalle de calles que el pasajero
+necesita para ubicarse. Validado en rutas de 0.7 km y 5.9 km.
+
+### Franja de barra de estado fija en verde de marca
+
+La franja reservada detrás de la barra de estado usa
+`PassengerColors.verdeMarca`; no sigue directamente el tema del
+sistema. La app tiene un solo tema hoy y una franja adaptativa dejaría
+negro sobre crema para usuarios con el celular en modo oscuro, siendo
+el único elemento oscuro de la pantalla.
+
+El modo oscuro está planificado como checkpoint propio. Cuando llegue,
+la franja deberá seguir al **tema de la app**, no directamente al
+sistema, y el cambio se hará desde el token.
+
+**PREGUNTA ABIERTA:** si el modo oscuro seguirá al sistema o será un
+ajuste dentro de la app. Depende del menú lateral, que aún no existe.
+
+Evidencia:
+`tukituki-passenger-app`, rama `test/home-layout-r1`, commit
+`a79abba22e33e0fa9af48ab82bfe90204a2736e7`;
+`lib/features/home/home_screen.dart`;
+`test/features/home/home_screen_test.dart`. `flutter analyze` limpio,
+242/242 tests en verde y validación de emulador aprobada por JuanJo.

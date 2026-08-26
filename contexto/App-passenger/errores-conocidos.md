@@ -10,7 +10,7 @@ Commit analizado:
 5c4f0f9136f2e49a4b746755963e01fa29aa3d49
 
 Última actualización:
-2026-08-18 (refrescado tras `CROSS-APP-R4.3I`, fast-forward de `test/r4-ride-identities` a `main`)
+2026-08-26 (agregados pendientes conocidos de `HOME-LAYOUT-R1`)
 
 Fuente de verdad:
 Este documento es contexto auxiliar. Si contradice al código actual,
@@ -243,3 +243,34 @@ Evidencia:
 - No se ejecutó la app en un emulador/dispositivo real; los hallazgos
   de esta sección provienen de lectura de código, `flutter analyze` y
   `flutter test` únicamente.
+
+## Campo de precio acepta texto libre
+
+Estado:
+PENDIENTE. Preexistente; **no fue introducido por `HOME-LAYOUT-R1`**.
+
+El campo permite escribir letras. El botón se deshabilita correctamente
+cuando el contenido no representa un monto válido, por lo que no hay
+riesgo funcional, pero el input debería filtrar a dígitos y separador
+decimal. Se resolverá en el checkpoint de tarifa sugerida, donde ese
+campo se rediseñará por completo.
+
+## Alineación del ancla del marcador sin validar en zoom máximo
+
+Estado:
+PENDIENTE DE CONFIRMACIÓN VISUAL EN DISPOSITIVO FÍSICO.
+
+A ese nivel de zoom el mapa no muestra calles ni referencias contra las
+cuales medir. El ancla está correcta por construcción
+(`Offset(0.5, 1.0)` y la punta del PNG toca el borde inferior del
+lienzo), pero falta confirmación visual en un dispositivo físico.
+
+## Reformateo transversal en `home_screen.dart`
+
+Estado:
+LIMITACIÓN DEL HISTORIAL; sin cambio de comportamiento conocido.
+
+Se ejecutó `dart format` sobre el archivo completo, tocando métodos de
+otros checkpoints. No cambia el comportamiento, pero aproximadamente
+780 registros del diff son solo whitespace y dificultan revisar el
+historial de ese archivo.

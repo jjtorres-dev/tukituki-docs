@@ -1,7 +1,7 @@
 # TukiTuki — Historial de checkpoints
 
 Última actualización:
-2026-08-20
+2026-08-26
 
 Documento:
 Registro cronológico completo de checkpoints — solo crece por el final,
@@ -340,6 +340,8 @@ En todos los casos, el estado técnico de base es consistente con "checkpoint ce
   - **No tocado**: Backend, Admin Web, Driver, resto de pantallas del Passenger (Home/búsqueda/recibo), Railway, producción.
   - **VEREDICTO: `DESIGN-SYSTEM-R1 FINAL-CLOSED-ON-MAIN`.**
   - **NEXT**: migrar el resto de las pantallas del Passenger al sistema de diseño, empezando por `home_screen.dart` (el mapa) — es la pantalla de uso diario, hoy fuera del sistema (ver `estado-actual.md` sección 7).
+
+- **`HOME-LAYOUT-R1` 🟡 PUBLICADO EN RAMA, PENDIENTE DE FUSIÓN A `main`** (2026-08-26, `tukituki-passenger-app`, rama `test/home-layout-r1`, commit `a79abba22e33e0fa9af48ab82bfe90204a2736e7`) — reconstrucción del layout de Home verificada y aprobada por JuanJo en emulador. Incluye mapa a fondo completo; hoja flotante que crece con su contenido; footer no scrolleable y siempre alcanzable con el teclado abierto; marcador real de Google Maps para el origen con icono propio y altura lógica centralizada; etiqueta de dirección posicionada con `getScreenCoordinate`; reencuadre sincronizado con la medición real de la hoja, agrupado y protegido por generación de destino/cotización; margen de encuadre de 48 px lógicos; y franja sólida de barra de estado en `PassengerColors.verdeMarca`, con iconos claros y altura derivada del inset real del dispositivo. `flutter analyze` limpio, 242/242 tests en verde y validación de emulador aprobada. No queda ningún pendiente funcional del checkpoint. **Estado Git:** commit publicado en `origin/test/home-layout-r1`; todavía no fusionado a `main`.
 
 ---
 

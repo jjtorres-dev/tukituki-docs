@@ -1,7 +1,7 @@
 # TukiTuki — Estado del proyecto
 
 Última actualización:
-2026-08-24
+2026-08-26
 
 Estado:
 ACTIVO
@@ -108,7 +108,13 @@ Este comportamiento coincide exactamente con la decisión de producto de matchin
 - ✅ Recibo de viaje con desglose de tarifa y estado de pago.
 - ✅ **Sistema de diseño implementado en tres pantallas** (`DESIGN-SYSTEM-R1`, 2026-08-24, `FINAL-CLOSED-ON-MAIN`): tokens de marca (`PassengerColors`/`PassengerSpacing`/`PassengerTypography`), tipografía Manrope empaquetada como asset (ya no depende de Google Fonts en runtime), y dos componentes nuevos reutilizables (`GradientHeaderSheet`, `TukiTextField`). Login, Registro y Completar perfil migrados a estos tokens. El checkbox de aceptación de términos del registro se reemplazó por aceptación implícita al pulsar "Crear cuenta" (estándar de la industria; el Backend nunca esperó un campo de aceptación explícita). El splash intermedio entre registro/login y el resto del flujo ahora salta su delay de arranque en frío cuando se llega recién autenticándose, y usa una transición fade en vez del salto abrupto de color a pantalla completa. Validado físicamente por JuanJo en dispositivo real bajo sol directo. Ver `App-passenger/decisiones.md` y `historial-checkpoints.md` para el detalle completo.
 
+### Publicado en rama, pendiente de fusión a `main`
+
+- 🟡 **`HOME-LAYOUT-R1` terminado y sin pendientes internos** (2026-08-26): publicado en `test/home-layout-r1`@`a79abba22e33e0fa9af48ab82bfe90204a2736e7`, todavía **no fusionado a `main`**. Integra el marcador definitivo del origen con icono propio, mapa a fondo completo, hoja flotante que crece con su contenido, footer no scrolleable, etiqueta posicionada mediante `getScreenCoordinate`, reencuadre sincronizado con la altura real medida de la hoja y franja sólida de barra de estado. Verificado y aprobado por JuanJo en emulador; `flutter analyze` limpio y 242/242 tests en verde. No queda ningún pendiente del checkpoint; la única acción restante es autorizar su fusión a `main`.
+
 ### Pendiente
+
+- ℹ️ `HOME-LAYOUT-R1` no cierra la migración visual completa de Home: reutiliza `PassengerColors.verdeMarca` para la franja de estado, pero sus demás colores y tipografía siguen perteneciendo a otro checkpoint.
 
 - 🔴 **El resto de las pantallas del Passenger sigue sin migrar al sistema de diseño** — solo Login/Registro/Completar perfil están en `PassengerColors`/`PassengerTypography`/`PassengerSpacing`; el resto sigue con colores/tipografía definidos a mano por pantalla (ver `App-passenger/convenciones.md`, "Colores de UI: `static const Color _nombreColor` privados por pantalla"). Empezar por **`home_screen.dart`** (el mapa) — es la pantalla que el usuario ve a diario tras iniciar sesión, y hoy usa tipografía y colores fuera del sistema.
 
