@@ -2,6 +2,8 @@
 
 Definido el 20/08/2026 sobre las pantallas de login, registro y completar perfil de la app Passenger.
 
+Extendido el 26/08/2026 (`DESIGN-SYSTEM-R2`) a partir de la auditoría de `home_screen.dart` — primera pantalla del sistema con mapa a pantalla completa, chips tocables y texto sobre superficie oscura fuera del header. Los tokens de esta extensión están marcados `[R2]` donde corresponde. `DESIGN-SYSTEM-R2` solo agrega tokens — no migra ninguna pantalla.
+
 Este documento es la fuente de verdad para todo lo visual. Cualquier color, tamaño o medida que se use en las apps tiene que salir de aquí. Si algo que necesitas no está definido, se decide y se agrega a este documento antes de escribirlo en el código.
 
 ---
@@ -53,6 +55,8 @@ Cada color tiene un nombre y un uso. No se usan colores fuera de esta lista.
 
 El amarillo es exclusivo del botón principal. No se usa para fondos, íconos ni decoración. Su valor está en que el usuario aprenda que amarillo significa "aquí se toca".
 
+**Excepción documentada — FAB de recentrar en Home (`DESIGN-SYSTEM-R2`, 2026-08-26).** Home tiene dos elementos en `amarilloCTA`: el botón principal de la hoja ("Ofrecer y buscar conductor" y estados relacionados) y el botón flotante de "centrar en mi ubicación" sobre el mapa. Es una excepción deliberada a la regla de arriba, no un olvido: el FAB de recentrar no compite con el CTA por la misma decisión — nunca son "la siguiente acción" al mismo tiempo, uno vive sobre el mapa como utilidad de navegación y el otro en la hoja como el cierre del flujo — y darle un color distinto al FAB no tenía, a priori, un beneficio claro de claridad que compensara el trabajo de definir uno nuevo. Se deja así **por ahora**; no está resuelto de forma permanente. Si se retoma, revisar si el FAB debería moverse a un color neutro (p. ej. blanco con ícono `verdeMarca`, como ya usa el botón de menú) en vez de a otro tono cálido nuevo.
+
 ### Estados
 
 | Nombre | Hex | Uso |
@@ -61,6 +65,23 @@ El amarillo es exclusivo del botón principal. No se usa para fondos, íconos ni
 | `alerta` | `#E8951A` | Advertencias, pago pendiente |
 | `error` | `#E05B4F` | Errores de validación, cancelaciones |
 | `destino` | `#D8542C` | Marcador de destino en el mapa |
+| `aviso` [R2] | `#B8641E` | Ícono y texto de estados vencidos o erróneos que no son error de formulario (p. ej. "sin ubicación", "cotización vencida") |
+| `fondoAviso` [R2] | `#FFF0E8` | Fondo de la caja de aviso que acompaña a `aviso` |
+
+**`aviso` es un color nuevo, no una reutilización de `alerta` ni de `destino` (`DESIGN-SYSTEM-R2`, 2026-08-26).** Antes de esta extensión, `home_screen.dart` usaba `destino` (`#D8542C`, pensado como "marcador de destino en el mapa") también para el aviso de "sin ubicación" — mezclaba dos significados distintos en un mismo color. La alternativa obvia, reutilizar `alerta` (`#E8951A`), se descartó porque ese valor es **idéntico al acento de la app del Conductor** (ver sección 2, "Acento"): usarlo de forma prominente en Home — la pantalla de mapa a pantalla completa que el pasajero ve todo el viaje — arriesgaba la señal de reconocimiento de marca de la sección 1 ("el pasajero, al subirse de noche, reconoce de un vistazo que la pantalla que le muestra el conductor es realmente la app del conductor"). `aviso` (`#B8641E`) comparte la familia cálida de `destino`/`alerta`/`amarilloCTA` (coherencia de paleta) pero es visiblemente más oscuro/ocre que los tres — distinguible a simple vista, no solo en el valor hex.
+
+**PROVISIONAL (aprobado como tal por JuanJo, 2026-08-26).** No se pudo validar en pantalla en `DESIGN-SYSTEM-R2` porque ese checkpoint solo agrega tokens — no se usan en ninguna vista todavía. Se valida cuando se aplique en la migración de `home_screen.dart`, prestando atención especial al caso de "cotización vencida": ese texto va sobre `verdeMarca` (verde oscuro), no sobre `crema` — un ocre oscuro como `aviso` sobre un fondo oscuro puede quedar con poco contraste, a diferencia del uso sobre `fondoAviso`/`crema` (claro), donde el contraste es más fácil de lograr. Si falla ese caso, el valor del token se corrige en un solo lugar (`passenger_colors.dart`).
+
+### Texto sobre fondo oscuro [R2]
+
+El sistema se definió sobre pantallas claras (login, registro, completar perfil) y no cubría texto sobre una superficie oscura fuera del header degradado. `DESIGN-SYSTEM-R2` (2026-08-26) agrega dos tokens, tomados literalmente de valores que ya estaban en uso como literales en `home_screen.dart`:
+
+| Nombre | Hex | Uso |
+|---|---|---|
+| `textoTenueSobreOscuro` | `#8FA891` | Texto micro sobre `verdeMarca` (p. ej. la etiqueta "TE RECOGEMOS EN" del marcador de origen) |
+| `textoSecundarioSobreOscuro` | `#B9C8BC` | Texto de apoyo sobre `verdeMarca` (p. ej. ayuda y estado de vigencia dentro de la tarjeta de oferta) |
+
+Nombrados por rol — paralelos a `textoTenue` y `textoSecundario` de la sección 2, con calificador de superficie — no por su valor de color, para que el nombre siga siendo válido si el tono exacto cambia más adelante.
 
 ---
 
@@ -84,6 +105,17 @@ Se eligió por tres razones: las minúsculas son grandes en proporción, así qu
 
 Los títulos de pantalla llevan `letter-spacing: -0.6`. Los botones, `-0.2`. El interlineado del texto corrido es 1.5.
 
+### Escalas del campo de precio [R2] — provisionales
+
+Agregadas en `DESIGN-SYSTEM-R2` (2026-08-26) a partir de `home_screen.dart` ("¿Cuánto quieres ofrecer?"), el único lugar de la app con una cifra editable en tamaño grande:
+
+| Uso | Tamaño | Peso |
+|---|---|---|
+| Valor del monto (`montoOferta`) | 27 | 800 |
+| Prefijo "S/ " (`prefijoMoneda`) | 19 | 700 |
+
+**Provisionales.** El campo de precio se rediseña por completo en el checkpoint de tarifa sugerida (ver `App-passenger/errores-conocidos.md`, "Campo de precio acepta texto libre") — estas dos escalas pueden cambiar o desaparecer cuando eso ocurra. No forman parte de la escala general de la tabla de arriba porque son específicas de ese único campo, no reutilizables en otro contexto.
+
 ---
 
 ## 4. Medidas
@@ -100,8 +132,12 @@ Los títulos de pantalla llevan `letter-spacing: -0.6`. Los botones, `-0.2`. El 
 | Separación antes del botón principal | 24 |
 | Alto de barra de progreso | 5 |
 | Lado del checkbox | 24, radio 7 |
+| Radio de píldora/chip [R2] | 30 |
+| Radio de etiqueta de marcador [R2] | 11 |
 
 **Ningún elemento tocable mide menos de 44 de lado.** Los campos de 56 y los botones de 58 cumplen con margen.
+
+Los dos radios `[R2]` se agregaron en `DESIGN-SYSTEM-R2` (2026-08-26): el sistema solo contemplaba 14 (campos y botones) y 26 (hoja) porque se definió sobre pantallas sin mapa ni chips tocables. `radioPildora` (30) es la forma completamente redondeada de los chips sobre el mapa (métricas, destino sugerido). `radioEtiquetaMarcador` (11) es propio de la etiqueta que acompaña al marcador de origen — más chica y menos redondeada que una píldora, no reutilizable en otro elemento hoy.
 
 ---
 
@@ -141,6 +177,33 @@ Fondo blanco siempre. Nunca crema sobre crema — ese era el defecto principal d
 La etiqueta va **encima** del campo, en 13/600 `verdeMarca`. Así el interior del campo queda libre para el valor que el usuario escribe, y el usuario puede ver qué escribió sin recordar de qué campo se trataba.
 
 El placeholder muestra un ejemplo real del formato esperado (`987 654 321`), no una repetición de la etiqueta.
+
+### Barra de búsqueda [R2]
+
+Variante propia, distinta de "Campo de texto" — agregada en `DESIGN-SYSTEM-R2` (2026-08-26) a partir de la barra de búsqueda de destino de Home. **Decidido: no se fuerza al patrón de "Campo de texto"/`TukiTextField`.** Ese patrón (etiqueta encima, alto fijo 56, campo aislado) es el de un formulario — Login y Registro. La barra de búsqueda es otro patrón de uso: una única entrada flotante con lupa, sin etiqueta, cuyo contenido (resultados de autocompletado) crece debajo de ella.
+
+Diferencias deliberadas frente a "Campo de texto":
+
+| | Campo de texto | Barra de búsqueda |
+|---|---|---|
+| Etiqueta | Encima, siempre visible | Ninguna — el ícono de lupa cumple ese rol |
+| Alto | Fijo, 56 | Variable, según el padding vertical del contenido (no un número fijo del sistema) |
+| Ícono | Solo en `prefix`/`sufix` opcionales | Lupa fija a la izquierda; a la derecha, spinner de carga o botón de limpiar, mutuamente excluyentes |
+| Radio | 14 (`radioCampoBoton`) | Mismo `radioCampoBoton` (14) — no se define un radio nuevo para esta variante; el valor que usaba `home_screen.dart` (15) era un literal sin intención de diseño, no una decisión distinta |
+| Fondo | Blanco siempre | Crema secundario, sin token propio todavía (mismo criterio de "nunca crema sobre crema" — la barra debe distinguirse del fondo de la hoja) |
+
+Borde, igual criterio que "Campo de texto":
+
+| Estado | Borde |
+|---|---|
+| Reposo | 1 px `bordeCampo` |
+| Activo | 1.5 px `verdeMarca` |
+
+**Corrección respecto al código actual**: `home_screen.dart` usa hoy el borde activo en `acento` (verde de acción), no en `verdeMarca` como dicta esta sección para "Campo de texto" — la barra de búsqueda debe usar `verdeMarca`, igual que cualquier otro campo, cuando se migre.
+
+**Pendiente de decidir en el checkpoint de implementación** (no en este, que solo documenta): el fondo exacto de la barra en reposo — hoy `home_screen.dart` usa un crema secundario (`#FBF7EA`) sin token propio; la migración debe forzarlo a `crema` o a un color ya existente, no inventar uno nuevo solo para esto salvo que se vea mal en pantalla.
+
+**Recomendación de implementación — parámetro de `TukiTextField` vs. componente separado**: recomiendo **componente separado** (p. ej. `TukiSearchBar`), no un parámetro nuevo en `TukiTextField`. Razón: `TukiTextField` construye su `Container` sobre un contrato fijo — alto 56 constante, layout de una sola fila con slots `prefix`/`suffix` genéricos, y un bloque de `errorText` condicional debajo. La barra de búsqueda no solo cambia valores (alto, radio) sino la estructura interna: necesita alto flexible, un ícono de posición fija (no un slot genérico), y dos estados mutuamente excluyentes a la derecha (carga/limpiar) en vez de un `suffix` libre — meterlo como flag booleano (`isSearchBar: true`) obligaría a `TukiTextField` a ramificar buena parte de su `build()` según ese flag, lo que en la práctica sería mantener dos componentes dentro de un mismo archivo con un `if` en el medio. Un widget separado que reutiliza los mismos tokens de color (`bordeCampo`, `verdeMarca`, `radioCampoBoton`) y el mismo criterio de foco/error es más simple de leer y de testear por separado. **Costo de la alternativa descartada** (parámetro en `TukiTextField`): evita un archivo nuevo, pero acopla dos formas visuales distintas a un mismo widget y hace más frágil cualquier cambio futuro a "Campo de texto" (hay que verificar que no rompa la rama de búsqueda). Si en la práctica la barra de búsqueda termina necesitando más comportamiento propio (debounce, lista de predicciones acoplada), un componente separado también da más margen para crecer sin forzar ese crecimiento dentro de `TukiTextField`.
 
 ### Botón principal
 
