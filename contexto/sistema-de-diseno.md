@@ -83,6 +83,16 @@ El sistema se definió sobre pantallas claras (login, registro, completar perfil
 
 Nombrados por rol — paralelos a `textoTenue` y `textoSecundario` de la sección 2, con calificador de superficie — no por su valor de color, para que el nombre siga siendo válido si el tono exacto cambia más adelante.
 
+### Superposición sobre el mapa [HOME-DESIGN-R1]
+
+Categoría nueva, agregada el 2026-08-26 al planificar la migración de `home_screen.dart`: colores que se dibujan directamente **sobre el mapa** (rutas, overlays), no sobre una superficie de interfaz (`crema`/`blanco`/`verdeMarca`). Un color de mapa se valida contra el mapa real (Google Maps, distintos niveles de zoom, distinto terreno), no contra el resto de la paleta — puede no tener ninguna relación visual con los demás tokens, y no tiene por qué tenerla.
+
+| Nombre | Hex | Uso |
+|---|---|---|
+| `lineaRuta` | `#5C8A17` | Línea de la ruta trazada sobre el mapa entre origen y destino |
+
+**No reutiliza `acento` (`#1F7A3E`).** El valor de `lineaRuta` ya estaba en uso como literal (`_secondaryGreen` en `home_screen.dart`) y funciona: es legible sobre el mapa real. Migrarlo a `acento` lo oscurecería sin haber validado ese cambio en calle — se conserva el valor existente, con nombre propio, en vez de forzarlo a un token de interfaz que nunca fue pensado para dibujarse sobre un mapa. Si en el futuro aparecen más colores de este tipo (otro trazo, un overlay), esta es la sección donde viven — no la de "Estados" ni la de "Base".
+
 ---
 
 ## 3. Tipografía
