@@ -42,13 +42,15 @@ hecho vigente, remitiendo al historial para el detalle.
 | Backend | `tukituki-backend` | `main` | `29fe187aa31f5aad2db20ecd49534a218b358ab6` (`29fe187a`) |
 | Admin Web | `tukituki-admin-web` | `main` | `989ffc42faef5788c18455993d2462285b4db18d` (`989ffc42`) |
 | Driver | `tukituki-driver-app` | `main` | `2743274900ef33374a76606b62ff841d476c232f` (`2743274`) |
-| Passenger | `tukituki-passenger-app` | `main` | `a79abba22e33e0fa9af48ab82bfe90204a2736e7` (`a79abba`) |
+| Passenger | `tukituki-passenger-app` | `main` | `3dc1a219b8134237be1e7d5e8a786545ac60dcc2` (`3dc1a21`) |
 
 ✅ **Verificado (2026-08-20)** contra `git branch --show-current` + `git rev-parse HEAD` reales de los cuatro repos, working tree limpio en los cuatro. Backend y Admin Web coincidían con lo que ya estaba registrado; Driver y Passenger se actualizaron — ambos habían avanzado el mismo día con la fusión de `R4.4B` (ver `historial-checkpoints.md`).
 
 ✅ **Passenger actualizado (2026-08-24, `DESIGN-SYSTEM-R1` — FINAL-CLOSED-ON-MAIN)**: fast-forward de `test/design-system-r1` → `main` (sobre `7d717ff`), publicado en `origin`. Sistema de diseño del pasajero implementado y validado físicamente bajo sol directo — ver sección 7 e `historial-checkpoints.md` para el detalle completo. Rama `test/design-system-r1` eliminada local y remotamente tras confirmar contención. `git status --short` limpio.
 
 ✅ **Passenger actualizado (2026-08-26, `HOME-LAYOUT-R1` — FINAL-CLOSED-ON-MAIN)**: fast-forward puro de `test/home-layout-r1` → `main`; `main` y `origin/main` quedaron en `a79abba22e33e0fa9af48ab82bfe90204a2736e7`. Contención total confirmada local y remotamente antes de eliminar `test/home-layout-r1` en ambos lugares. Sin merge commit, sin pendientes internos del checkpoint y con `git status` limpio.
+
+✅ **Passenger actualizado (2026-08-26, `DESIGN-SYSTEM-R2` — FINAL-CLOSED-ON-MAIN)**: fast-forward puro de `test/design-system-r2` → `main` (sobre `a79abba`); `main` y `origin/main` quedaron en `3dc1a219b8134237be1e7d5e8a786545ac60dcc2`. Agrega los tokens que faltaban para migrar Home (color `aviso`/`fondoAviso` — provisional, ver `App-passenger/decisiones.md` —, texto sobre fondo oscuro, radios de píldora/etiqueta de marcador, escalas provisionales del campo de precio) y documenta en `sistema-de-diseno.md` la variante "Barra de búsqueda" y la excepción del FAB amarillo de recentrar. **Solo agrega tokens — `home_screen.dart` no se tocó, sigue sin migrar** (ver sección 7). `flutter analyze` limpio, 242/242 tests en verde. Contención total confirmada antes de eliminar `test/design-system-r2` local y remotamente.
 
 El detalle de cómo se llegó a cada uno de estos commits (checkpoints,
 fast-forwards, smoke tests, limpieza de ramas) está en
@@ -116,7 +118,7 @@ Este comportamiento coincide exactamente con la decisión de producto de matchin
 
 - ℹ️ `HOME-LAYOUT-R1` no cierra la migración visual completa de Home: reutiliza `PassengerColors.verdeMarca` para la franja de estado, pero sus demás colores y tipografía siguen perteneciendo a otro checkpoint.
 
-- 🔴 **El resto de las pantallas del Passenger sigue sin migrar al sistema de diseño** — solo Login/Registro/Completar perfil están en `PassengerColors`/`PassengerTypography`/`PassengerSpacing`; el resto sigue con colores/tipografía definidos a mano por pantalla (ver `App-passenger/convenciones.md`, "Colores de UI: `static const Color _nombreColor` privados por pantalla"). Empezar por **`home_screen.dart`** (el mapa) — es la pantalla que el usuario ve a diario tras iniciar sesión, y hoy usa tipografía y colores fuera del sistema.
+- 🔴 **El resto de las pantallas del Passenger sigue sin migrar al sistema de diseño** — solo Login/Registro/Completar perfil están en `PassengerColors`/`PassengerTypography`/`PassengerSpacing`; el resto sigue con colores/tipografía definidos a mano por pantalla (ver `App-passenger/convenciones.md`, "Colores de UI: `static const Color _nombreColor` privados por pantalla"). Empezar por **`home_screen.dart`** (el mapa) — es la pantalla que el usuario ve a diario tras iniciar sesión, y hoy usa tipografía y colores fuera del sistema. `DESIGN-SYSTEM-R2` (2026-08-26, `FINAL-CLOSED-ON-MAIN`) ya agregó los tokens que faltaban para esa migración (color `aviso` — provisional —, texto sobre fondo oscuro, radios de píldora/etiqueta de marcador, escalas del campo de precio, y la variante "Barra de búsqueda" documentada) — la migración en sí sigue sin empezar, es el próximo checkpoint.
 
 - 🔴 "Has llegado a tu destino" con confirmación del Passenger al completar el Driver — no hay evidencia de esta pantalla/flujo en `App-passenger` (ver sección 13, no debe bloquear el cierre del Ride si el Passenger no confirma).
 - 🔴 Estado del viaje en background/pantalla bloqueada tipo navegación activa — no existe (la app solo actualiza en foreground vía `Timer.periodic`).

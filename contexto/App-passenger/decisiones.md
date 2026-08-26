@@ -847,3 +847,113 @@ Evidencia:
 `lib/features/home/home_screen.dart`;
 `test/features/home/home_screen_test.dart`. `flutter analyze` limpio,
 242/242 tests en verde y validación de emulador aprobada por JuanJo.
+
+---
+
+## `DESIGN-SYSTEM-R2` — Tokens nuevos para migrar Home, sin migrar todavía (2026-08-26)
+
+Estado:
+**FINAL-CLOSED-ON-MAIN.** Rama `test/design-system-r2`, creada desde
+`main`@`a79abba`, integrada por fast-forward puro (`main` avanzó a
+`3dc1a219b8134237be1e7d5e8a786545ac60dcc2`, push a `origin/main`
+confirmado). `flutter analyze` limpio, 242/242 tests en verde (sin
+cambio de conteo — el checkpoint solo agrega declaraciones `static
+const`, ningún comportamiento nuevo). Rama eliminada local y
+remotamente tras confirmar contención total. **Alcance deliberadamente
+acotado a tokens: `home_screen.dart` no se tocó en ningún momento.**
+
+Qué se decidió:
+
+**1. El color `aviso` (`#B8641E`, nuevo) no reutiliza `alerta`
+(`#E8951A`).** `alerta` es idénticamente el mismo hex que el acento de
+la app del Conductor (`sistema-de-diseno.md` sección 2, "Acento").
+Usarlo de forma prominente en Home — la pantalla de mapa a pantalla
+completa que el pasajero ve durante todo el viaje, no una pantalla de
+formulario ocasional como Login/Registro — erosiona la señal de
+reconocimiento entre las dos apps que describe la sección 1 del
+sistema de diseño: "el pasajero, al subirse de noche, reconoce de un
+vistazo que la pantalla que le muestra el conductor es realmente la
+app del conductor". Un ocre distinto (`aviso`) mantiene la familia
+cálida de la paleta sin arriesgar esa señal.
+
+**2. Tampoco reutiliza `destino` (`#D8542C`).** Antes de este
+checkpoint, `home_screen.dart` usaba `destino` también para el aviso
+de "sin ubicación" — mezclaba "esto es el pin de destino en el mapa"
+con "esto necesita tu atención", dos significados que no deberían
+compartir un mismo color.
+
+**`aviso` queda PROVISIONAL, aprobado explícitamente como tal por
+JuanJo (2026-08-26)**: no se pudo validar en pantalla en este
+checkpoint porque los tokens no se usan en ninguna vista todavía. Se
+valida recién en la migración real de `home_screen.dart`, con atención
+especial al caso "cotización vencida" — ese texto va sobre
+`verdeMarca` (verde oscuro), no sobre `crema`; un ocre oscuro como
+`aviso` sobre un fondo oscuro puede quedar con poco contraste, a
+diferencia de su uso sobre `fondoAviso`/`crema` (claro). Si falla, el
+valor se corrige en un solo lugar (`passenger_colors.dart`).
+
+**3. `TukiSearchBar` como componente separado, no como parámetro de
+`TukiTextField`.** La barra de búsqueda de destino de Home cambia la
+**estructura** respecto al patrón de "Campo de texto"
+(`TukiTextField`), no solo valores puntuales: alto flexible en vez de
+fijo (56), un ícono de lupa en posición fija en vez de un slot
+`prefix`/`suffix` genérico, y dos estados mutuamente excluyentes a la
+derecha (spinner de carga / botón de limpiar) en vez de un `suffix`
+libre. Meterlo como flag booleano en `TukiTextField` habría obligado a
+ese widget a ramificar buena parte de su `build()` según el flag —en
+la práctica, mantener dos componentes dentro de un mismo archivo con
+un `if` en el medio. Un widget separado que reutiliza los mismos
+tokens de color (`bordeCampo`, `verdeMarca`, `radioCampoBoton`) es más
+simple de leer y de testear por separado, y deja margen si la barra
+termina necesitando comportamiento propio (debounce, lista de
+predicciones acoplada). **No se implementó en este checkpoint** —
+queda documentado como recomendación en `sistema-de-diseno.md`
+("Barra de búsqueda") para el checkpoint que migre Home.
+
+**4. El radio `15` del campo de búsqueda actual NO se tokenizó.** No
+es una decisión de diseño — es un literal cercano al `14`
+(`radioCampoBoton`) del sistema, sin intención detrás. Se fuerza a
+`radioCampoBoton` en la migración de `home_screen.dart`, no se agrega
+un token nuevo solo para preservar un valor que nunca fue elegido a
+propósito.
+
+Además, en el mismo checkpoint: dos tokens nuevos para texto sobre
+fondo oscuro (`textoTenueSobreOscuro`/`textoSecundarioSobreOscuro`,
+nombrados por rol, no por color — primer caso del sistema fuera del
+header degradado), y dos radios nuevos sin decisión pendiente
+(`radioPildora` = 30 para chips/píldoras, `radioEtiquetaMarcador` = 11
+para la etiqueta del marcador de origen) — el sistema solo contemplaba
+14 y 26 porque se definió sobre pantallas sin mapa ni chips.
+
+Por qué:
+
+Preparar la migración de `home_screen.dart` al sistema de diseño sin
+mezclar la decisión de qué token usar con la implementación del
+cambio visual — permite a JuanJo revisar y aprobar cada token (en
+particular el color `aviso`, marcado explícitamente provisional) antes
+de que se toque código de pantalla.
+
+Alternativas descartadas:
+
+- Reutilizar `alerta` (`#E8951A`) para el nuevo color de aviso —
+  descartada por el riesgo de confusión de marca con el Conductor (ver
+  punto 1).
+- Seguir reutilizando `destino` (`#D8542C`) para el aviso de "sin
+  ubicación" — descartada por mezclar dos significados distintos (ver
+  punto 2).
+- Parámetro `isSearchBar`/similar en `TukiTextField` en vez de un
+  componente separado — descartada por acoplar dos formas visuales
+  distintas a un mismo widget y hacer más frágil cualquier cambio
+  futuro a "Campo de texto" (ver punto 3).
+- Tokenizar el radio `15` actual del campo de búsqueda tal cual, para
+  no "perder" el valor — descartada porque ese valor nunca fue una
+  decisión de diseño, solo un literal cercano al token ya existente.
+
+Evidencia:
+`tukituki-passenger-app`, rama `test/design-system-r2`, commit
+`3dc1a219b8134237be1e7d5e8a786545ac60dcc2`;
+`lib/core/theme/passenger_colors.dart`,
+`lib/core/theme/passenger_spacing.dart`,
+`lib/core/theme/passenger_typography.dart`. `docs/contexto/sistema-de-diseno.md`
+(secciones 2, 3, 4 y 5, marcado `[R2]`). `flutter analyze` limpio,
+242/242 tests en verde antes y después de la fusión a `main`.
