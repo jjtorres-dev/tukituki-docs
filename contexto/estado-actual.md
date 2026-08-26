@@ -42,11 +42,13 @@ hecho vigente, remitiendo al historial para el detalle.
 | Backend | `tukituki-backend` | `main` | `29fe187aa31f5aad2db20ecd49534a218b358ab6` (`29fe187a`) |
 | Admin Web | `tukituki-admin-web` | `main` | `989ffc42faef5788c18455993d2462285b4db18d` (`989ffc42`) |
 | Driver | `tukituki-driver-app` | `main` | `2743274900ef33374a76606b62ff841d476c232f` (`2743274`) |
-| Passenger | `tukituki-passenger-app` | `main` | `421b18efe9b33e7cad9d6484cb03ae2aaab07234` (`421b18e`) |
+| Passenger | `tukituki-passenger-app` | `main` | `a79abba22e33e0fa9af48ab82bfe90204a2736e7` (`a79abba`) |
 
 ✅ **Verificado (2026-08-20)** contra `git branch --show-current` + `git rev-parse HEAD` reales de los cuatro repos, working tree limpio en los cuatro. Backend y Admin Web coincidían con lo que ya estaba registrado; Driver y Passenger se actualizaron — ambos habían avanzado el mismo día con la fusión de `R4.4B` (ver `historial-checkpoints.md`).
 
 ✅ **Passenger actualizado (2026-08-24, `DESIGN-SYSTEM-R1` — FINAL-CLOSED-ON-MAIN)**: fast-forward de `test/design-system-r1` → `main` (sobre `7d717ff`), publicado en `origin`. Sistema de diseño del pasajero implementado y validado físicamente bajo sol directo — ver sección 7 e `historial-checkpoints.md` para el detalle completo. Rama `test/design-system-r1` eliminada local y remotamente tras confirmar contención. `git status --short` limpio.
+
+✅ **Passenger actualizado (2026-08-26, `HOME-LAYOUT-R1` — FINAL-CLOSED-ON-MAIN)**: fast-forward puro de `test/home-layout-r1` → `main`; `main` y `origin/main` quedaron en `a79abba22e33e0fa9af48ab82bfe90204a2736e7`. Contención total confirmada local y remotamente antes de eliminar `test/home-layout-r1` en ambos lugares. Sin merge commit, sin pendientes internos del checkpoint y con `git status` limpio.
 
 El detalle de cómo se llegó a cada uno de estos commits (checkpoints,
 fast-forwards, smoke tests, limpieza de ramas) está en
@@ -108,9 +110,7 @@ Este comportamiento coincide exactamente con la decisión de producto de matchin
 - ✅ Recibo de viaje con desglose de tarifa y estado de pago.
 - ✅ **Sistema de diseño implementado en tres pantallas** (`DESIGN-SYSTEM-R1`, 2026-08-24, `FINAL-CLOSED-ON-MAIN`): tokens de marca (`PassengerColors`/`PassengerSpacing`/`PassengerTypography`), tipografía Manrope empaquetada como asset (ya no depende de Google Fonts en runtime), y dos componentes nuevos reutilizables (`GradientHeaderSheet`, `TukiTextField`). Login, Registro y Completar perfil migrados a estos tokens. El checkbox de aceptación de términos del registro se reemplazó por aceptación implícita al pulsar "Crear cuenta" (estándar de la industria; el Backend nunca esperó un campo de aceptación explícita). El splash intermedio entre registro/login y el resto del flujo ahora salta su delay de arranque en frío cuando se llega recién autenticándose, y usa una transición fade en vez del salto abrupto de color a pantalla completa. Validado físicamente por JuanJo en dispositivo real bajo sol directo. Ver `App-passenger/decisiones.md` y `historial-checkpoints.md` para el detalle completo.
 
-### Publicado en rama, pendiente de fusión a `main`
-
-- 🟡 **`HOME-LAYOUT-R1` terminado y sin pendientes internos** (2026-08-26): publicado en `test/home-layout-r1`@`a79abba22e33e0fa9af48ab82bfe90204a2736e7`, todavía **no fusionado a `main`**. Integra el marcador definitivo del origen con icono propio, mapa a fondo completo, hoja flotante que crece con su contenido, footer no scrolleable, etiqueta posicionada mediante `getScreenCoordinate`, reencuadre sincronizado con la altura real medida de la hoja y franja sólida de barra de estado. Verificado y aprobado por JuanJo en emulador; `flutter analyze` limpio y 242/242 tests en verde. No queda ningún pendiente del checkpoint; la única acción restante es autorizar su fusión a `main`.
+- ✅ **`HOME-LAYOUT-R1` — FINAL-CLOSED-ON-MAIN** (2026-08-26): integrado por fast-forward puro en `main`@`a79abba22e33e0fa9af48ab82bfe90204a2736e7` y publicado en `origin/main`. Integra el marcador definitivo del origen con icono propio, mapa a fondo completo, hoja flotante que crece con su contenido, footer no scrolleable, etiqueta posicionada mediante `getScreenCoordinate`, reencuadre sincronizado con la altura real medida de la hoja y franja sólida de barra de estado. Verificado y aprobado por JuanJo en emulador; `flutter analyze` limpio y 242/242 tests en verde. Contención total confirmada antes de borrar la rama `test/home-layout-r1` local y remota; no queda ningún pendiente del checkpoint.
 
 ### Pendiente
 
