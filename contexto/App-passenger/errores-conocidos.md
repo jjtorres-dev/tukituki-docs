@@ -10,7 +10,7 @@ Commit analizado:
 5c4f0f9136f2e49a4b746755963e01fa29aa3d49
 
 Última actualización:
-2026-08-26 (agregados pendientes conocidos de `HOME-LAYOUT-R1`)
+2026-08-27 (agregados pendientes conocidos de `HOME-FLOW-R1`)
 
 Fuente de verdad:
 Este documento es contexto auxiliar. Si contradice al código actual,
@@ -234,6 +234,57 @@ Qué falta verificar cuando exista una cuenta con historial real:
 
 Evidencia:
 `lib/features/home/home_screen.dart` (`_buildSuggestedDestinationChip`, `_selectSuggestedDestination`); `docs/contexto/App-passenger/decisiones.md`, entrada `SUGGESTED-DESTINATIONS-R1`.
+
+## Pin del destino tapado por la tarjeta flotante mientras se calcula la tarifa (`HOME-FLOW-R1`, 2026-08-27)
+
+Estado:
+ACEPTADO SIN CORREGIR — comportamiento transitorio, verificado en
+emulador.
+
+Qué se observó:
+Al elegir un destino tocando el mapa en la zona alta de la pantalla, el
+pin del destino queda tapado por la tarjeta origen/destino flotante
+(overlay superior, ver `App-passenger/decisiones.md`, `HOME-FLOW-R1`)
+mientras la tarifa todavía se está calculando.
+
+Por qué se aceptó sin corregir:
+Es transitorio: en cuanto llega la cotización, `_fitCameraToRoute`
+reencuadra la cámara a la ruta completa (origen + destino + polyline) y
+el pin queda visible. La ventana en la que el pin permanece tapado es
+solo la duración de la llamada a `fares/estimate`, no un estado
+persistente. Verificado en emulador por JuanJo — observación menor, sin
+impacto funcional (el pin sigue existiendo y es tocable normalmente
+apenas se reencuadra).
+
+Evidencia:
+`lib/features/home/home_screen.dart` (`_buildOriginDestinationCard`
+como overlay superior, `_fitCameraToRoute`).
+
+## Resultados de Google Places no vienen ordenados por cercanía (`HOME-FLOW-R1`, 2026-08-27)
+
+Estado:
+PENDIENTE. Sin evidencia de una causa dentro de esta app — comportamiento
+observado del propio servicio de Google Places.
+
+Qué se observó:
+Al buscar "upeu" en `SearchDestinationScreen`, un resultado a ~4.x km de
+distancia del origen aparece antes en la lista que otro resultado a
+~1.4 km. `SearchDestinationScreen` muestra las predicciones en el orden
+que entrega `places/autocomplete` — no aplica ningún ordenamiento propio
+por distancia.
+
+Por qué no se corrigió en este checkpoint:
+Es el orden que devuelve Google Places, no una decisión ni un bug de
+lógica de esta app. Corregirlo requeriría calcular distancia por
+predicción (que Places no siempre expone sin una llamada adicional por
+resultado a `getDetails`) y reordenar del lado cliente, o depender de un
+parámetro de sesgo geográfico distinto en la llamada a Places —
+ninguno de los dos se evaluó ni se implementó en este checkpoint.
+
+Evidencia:
+`lib/features/home/search_destination_screen.dart` (consumo de
+`places/autocomplete`); observado en emulador por JuanJo con la
+búsqueda "upeu".
 
 ## Notas de alcance de esta verificación
 

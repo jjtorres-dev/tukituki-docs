@@ -7,7 +7,7 @@ Branch analizada:
 main
 
 Última actualización:
-2026-08-26
+2026-08-27
 
 Fuente de verdad:
 Este documento es contexto auxiliar. Si contradice al código actual,
@@ -1077,3 +1077,174 @@ de contraste); `lib/core/theme/passenger_colors.dart`,
 `lib/features/home/home_screen.dart`.
 `docs/contexto/sistema-de-diseno.md` (sección 2, nota de `aviso`
 actualizada). `flutter analyze` limpio, 249/249 tests en verde.
+
+---
+
+## `HOME-FLOW-R1` — rediseño del flujo de Home: búsqueda aparte, tarjeta flotante, recentrado al limpiar (2026-08-27)
+
+Estado:
+**FINAL-CLOSED-ON-MAIN.** Rama `test/home-flow-r1`, cuatro commits
+(`b974dcc`, `609d384`, `41d910a`, `45dcff2`), creada desde
+`main`@`ce3680a`, integrada por fast-forward puro
+(`main`@`45dcff24379e09b42662b5c2bbcbdf90ddf955d1`). `flutter analyze`
+limpio, 258/258 tests en verde. Verificado y aprobado por JuanJo en
+emulador. Rama eliminada local y remotamente tras confirmar contención
+total. Ver `historial-checkpoints.md` para el detalle etapa por etapa.
+
+Qué se decidió:
+
+**1. La búsqueda es pantalla aparte (`SearchDestinationScreen`); el
+estado con destino ya elegido NO lo es — es una rama de la propia
+Home.** Antes de este checkpoint, buscar y tener un destino elegido
+convivían dentro de la misma `HomeScreen` (campo inline + hoja
+inferior). Ahora buscar abre una pantalla dedicada que solo existe
+mientras se escribe; en cuanto se elige un resultado, su
+`SearchDestinationResult` vuelve a `HomeScreen` y esa pantalla se
+descarta — el estado "con destino" sigue viviendo en `HomeScreen`
+(tarjeta flotante + hoja con cotización/oferta), nunca en la pantalla
+de búsqueda.
+
+Por qué:
+Con el teclado abierto, el mapa detrás de un campo inline es
+prácticamente inservible (tapado en más de la mitad de la pantalla) —
+una pantalla dedicada libera esa restricción mientras se escribe. Además,
+la lista de predicciones de autocomplete crece con cada tecla; hospedarla
+dentro de la misma hoja que ya tiene que mostrar cotización, oferta y
+CTA la habría obligado a competir por espacio con contenido que no
+tiene relación con el acto de escribir una búsqueda.
+
+**2. El botón atrás desde Home-con-destino limpia el destino y vuelve
+a Home vacío, no a la pantalla de búsqueda.** Un `PopScope` (`canPop:
+destination == null`) intercepta el pop mientras hay destino elegido y
+llama a `_clearDestination()` — el mismo método que ya usaba "Quitar
+destino" en la tarjeta. No hay ningún camino, ni back físico ni el
+botón de la tarjeta, que devuelva a `SearchDestinationScreen` con el
+destino ya elegido.
+
+Por qué:
+Volver a una búsqueda ya cumplida no tiene sentido para el usuario — el
+destino ya está fijado y confirmado; retroceder a la pantalla que sirvió
+para elegirlo no es una acción que el pasajero esperaría poder deshacer
+por partes. Volver a Home vacío es la única acción de "atrás" coherente
+en este punto del flujo.
+
+**3. Al limpiar el destino, la cámara recentra en el origen con el
+mismo zoom de entrada (16).** `_clearDestination()` termina con
+`unawaited(_moveCameraToCurrentLocation())` — reutiliza exactamente la
+misma función que ya usa el botón de recentrar (a través de
+`_loadCurrentLocation()`) y el fallback de `onMapCreated`; mismo target
+(posición GPS actual) y mismo zoom (16). No se escribió ningún camino de
+cámara nuevo.
+
+Por qué:
+El usuario vuelve a Home vacío específicamente para elegir otro
+destino. Sin este fix, la cámara se quedaba en el último encuadre de
+ruta (zoom alejado, a nivel región) — a ese nivel no se distinguen
+calles ni es posible tocar el mapa con precisión para elegir un punto
+nuevo. Verificado en emulador que era el comportamiento real antes del
+fix (reportado explícitamente por JuanJo tras probar "atrás"/"Quitar
+destino").
+
+La protección de gesto manual existente (`_cameraMovedByUserSinceRouteFit`,
+`HOME-LAYOUT-R1`) no entró en conflicto con este recentrado: al momento
+de mover la cámara, `_advanceDestinationGeneration()` (invocado al
+principio de `_clearDestination()`) ya invalidó cualquier reencuadre de
+ruta pendiente y dejó `_activeRouteQuoteGeneration` en `null` —
+`_markCameraMovedByUser()` es un no-op en ese estado, así que no había
+ningún ajuste automático activo con el que este recentrado pudiera
+pelear. No hizo falta resolver ningún conflicto real entre ambas reglas.
+
+**4. Se eliminó el footer de CTA en Home vacío.** No se trata de haber
+quitado un botón dentro de un footer que sigue existiendo — el estado
+sin destino directamente no tiene footer.
+
+Por qué:
+Sin destino elegido no hay ninguna acción de CTA que ofrecer todavía
+(ni cotizar ni pedir viaje) — un footer vacío o con un botón
+deshabilitado habría sido espacio de pantalla sin propósito, además de
+competir con el mapa recién liberado del punto 1.
+
+**5. Los destinos sugeridos se quedan en Home, no en la pantalla de
+búsqueda, y pasaron de chips horizontales a lista vertical.**
+Preservan su máximo de `suggestedDestinationsCount` = 2, sin cambio
+(`SUGGESTED-DESTINATIONS-R1`).
+
+Por qué:
+En formato chip la dirección truncaba (verificado en emulador durante
+`HOME-FLOW-R1`, etapa 3); en lista vertical se lee completa. Además, se
+verificó que en la práctica los chips terminaban apilándose
+verticalmente de todas formas — el formato de chip no aportaba nada
+sobre una lista real. Quedan en Home (no en `SearchDestinationScreen`)
+porque son un atajo para no tener que buscar — moverlas a la pantalla
+de búsqueda habría sido contradictorio con su propio propósito.
+
+**6. El overlay superior (menú + tarjeta) se mide con el mismo
+mecanismo `_MeasureSize` que ya usaba el overlay inferior, y ambos
+delegan en un único `_handleOverlaySizeChanged`.** `GoogleMap.padding`
+pasa a usar `top` y `bottom` simultáneamente (antes solo `bottom`).
+
+Por qué:
+Mismo patrón que ya resolvió `HOME-LAYOUT-R1` para el overlay
+inferior — el reencuadre de cámara y el centrado del marcador propio
+dependen de conocer el área de mapa realmente libre; con la tarjeta
+ahora flotando arriba en vez de vivir dentro de la hoja, esa área libre
+depende también de la altura del overlay superior (incluida la llegada
+asíncrona de la dirección de origen, que puede cambiar su alto). Un
+mecanismo único evitaba mantener dos copias de la misma lógica de
+"programar reencuadre cuando cambia la altura medida".
+
+**7. El origen en la pantalla de búsqueda es de solo lectura.**
+`SearchDestinationScreen` recibe `originAddress`/`originCoordinates`
+como datos ya resueltos por `HomeScreen`; no hay ningún control para
+editarlos desde ahí.
+
+Por qué:
+Editar el origen es, en efecto, el ajuste del punto de recogida — una
+funcionalidad de producto distinta y más amplia que "buscar destino",
+que además choca contra el límite real de 30 geocodificaciones por hora
+del endpoint (`fares/origin-address`, ver `ORIGIN-ADDRESS-R1`). Se
+decidió dejarla fuera de este checkpoint y tratarla como un checkpoint
+aparte cuando se aborde, en vez de agregarla de paso aquí.
+
+Alternativas descartadas:
+
+- Mantener el campo de búsqueda inline dentro de la hoja de Home (el
+  diseño anterior) — descartada por el problema de espacio con el
+  teclado abierto y la lista de predicciones creciente (ver punto 1).
+- Que el botón atrás devuelva a `SearchDestinationScreen` en vez de a
+  Home vacío — descartada explícitamente: no tiene sentido reabrir una
+  búsqueda ya resuelta (ver punto 2).
+- Reutilizar el flujo completo de `_recenterOnCurrentLocation()`
+  (incluida la re-adquisición de GPS vía `_loadCurrentLocation()`) para
+  el recentrado al limpiar destino — descartada: el pedido era
+  específicamente de cámara, y disparar una relectura de GPS completa
+  (con sus efectos colaterales: `_locating`, mensajes de error,
+  re-resolución de dirección de origen) para una acción que no lo
+  necesita habría sido un efecto secundario no pedido. Se reutilizó en
+  cambio `_moveCameraToCurrentLocation()`, la pieza de cámara pura que
+  ya comparten tanto el botón de recentrar como el fallback de
+  `onMapCreated`.
+- Dejar un footer vacío o con CTA deshabilitado en Home vacío en vez de
+  quitarlo del todo — descartada, sin ninguna acción real que ofrecer
+  todavía (ver punto 4).
+- Mover los destinos sugeridos a `SearchDestinationScreen` — descartada
+  por ser contradictoria con su propósito de atajo (ver punto 5).
+- Permitir editar el origen desde `SearchDestinationScreen` en este
+  mismo checkpoint — descartada por alcance y por el límite de
+  geocodificaciones por hora; queda como checkpoint aparte (ver punto
+  7).
+
+Evidencia:
+`tukituki-passenger-app`, rama `test/home-flow-r1`, commits `b974dcc`,
+`609d384`, `41d910a`, `45dcff2`; `lib/features/home/home_screen.dart`
+(`_clearDestination`, `_moveCameraToCurrentLocation`,
+`_handleOverlaySizeChanged`, `PopScope`/`onPopInvokedWithResult`),
+`lib/features/home/search_destination_screen.dart`,
+`lib/features/home/domain/search_destination_result.dart`,
+`test/features/home/home_screen_test.dart`,
+`test/features/home/search_destination_screen_test.dart`. `flutter
+analyze` limpio, 258/258 tests en verde. Verificación en emulador por
+JuanJo del recentrado al limpiar destino (punto 3) y del pin
+transitoriamente tapado por la tarjeta flotante durante el cálculo de
+tarifa (ver `App-passenger/errores-conocidos.md`, aceptado sin
+corregir).

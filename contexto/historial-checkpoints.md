@@ -1,7 +1,7 @@
 # TukiTuki — Historial de checkpoints
 
 Última actualización:
-2026-08-26
+2026-08-27
 
 Documento:
 Registro cronológico completo de checkpoints — solo crece por el final,
@@ -366,6 +366,19 @@ En todos los casos, el estado técnico de base es consistente con "checkpoint ce
   - **Pendiente explícito, sin cerrar** (ver `App-passenger/errores-conocidos.md`): el estado "cotización vencida" nunca se validó visualmente — un `Timer` interno renueva la cotización automáticamente en el mismo instante en que vence, y cortar la red solo reemplaza la tarjeta por el error de conexión. Sin confirmar en pantalla real todavía.
   - **VEREDICTO: `HOME-DESIGN-R1-PARCIAL FINAL-CLOSED-ON-MAIN`.**
   - **NEXT**: rediseño de flujo de Home (fuera de alcance de este checkpoint); recién después de reestructurar la pantalla corresponde migrar su tipografía y sus medidas al sistema de diseño, para no migrar dos veces algo que va a cambiar de forma.
+
+- **`HOME-FLOW-R1` ✅ FINAL-CLOSED-ON-MAIN** (2026-08-27, `tukituki-passenger-app`, rama `test/home-flow-r1` creada desde `main`@`ce3680a`, cuatro commits: `b974dcc`, `609d384`, `41d910a`, `45dcff2`) — Rediseño del flujo de Home anunciado como `NEXT` por `HOME-DESIGN-R1-PARCIAL`: separa la búsqueda de destino en su propia pantalla y saca la tarjeta origen/destino de la hoja para flotarla sobre el mapa, cuatro etapas verificables:
+  - **Etapa 1 — extracción de la tarjeta** (`b974dcc`): refactor puro, cero cambio de comportamiento. `_buildOriginDestinationCard` se separa de `_buildSheetContent` como paso previo necesario para poder reposicionarla en la etapa 4; sigue llamada desde el mismo lugar de siempre dentro de la hoja.
+  - **Etapa 2 — `SearchDestinationScreen` aislada** (`609d384`): pantalla nueva (`lib/features/home/search_destination_screen.dart`) que absorbe el autocompletado, el debounce y `getDetails` que antes vivían inline en `home_screen.dart`. Devuelve un `SearchDestinationResult` (nuevo tipo en `lib/features/home/domain/search_destination_result.dart`) en vez de mutar estado de Home directamente. Todavía sin conectar a la pantalla real.
+  - **Etapa 3 — corte de Home vacío** (`41d910a`): `TukiSearchBar` (creado sin conector en `HOME-DESIGN-R1-PARCIAL`) se conecta por fin — pasa de `TextField` crudo a disparador de navegación (`readOnly` + `onTap`) hacia `SearchDestinationScreen`; el resultado se aplica con el mismo camino que ya usaba `_selectPlacePrediction`. El campo inline que permitía escribir encima de un destino ya elegido deja de existir en Home con destino — hay que volver a Home vacío primero.
+  - **Etapa 4 — tarjeta flotante + medición superior + recentrado al limpiar** (`45dcff2`): la tarjeta origen/destino se mueve de la hoja a un overlay superior medido (`_MeasureSize`, mismo mecanismo que ya usaba el overlay inferior — ambos delegan ahora en `_handleOverlaySizeChanged` compartido), junto al botón de menú; `GoogleMap.padding` usa `top` y `bottom` a la vez. El botón atrás con un destino elegido ya no sale de Home ni vuelve a la búsqueda — un `PopScope` intercepta el pop y llama a `_clearDestination()`, el mismo método que ya usaba "Quitar destino" en la tarjeta.
+    - **Corrección de la misma etapa, encontrada en verificación de emulador**: al limpiar el destino (atrás o "Quitar destino"), la cámara se quedaba en el encuadre alejado de la ruta recién borrada — Home vacío quedaba con el mapa a nivel región, sin poder distinguir calles ni tocar un punto nuevo. Fix: `_clearDestination()` termina con `unawaited(_moveCameraToCurrentLocation())` — reutiliza exactamente la función que ya usa el botón de recentrar (vía `_loadCurrentLocation()`) y el fallback de `onMapCreated`, mismo target (GPS actual) y mismo zoom de entrada (16). Sin código de cámara nuevo. La protección de gesto manual (`_cameraMovedByUserSinceRouteFit`) no entra en conflicto: `_advanceDestinationGeneration()`, ya invocado al principio de `_clearDestination()`, invalida cualquier reencuadre de ruta pendiente y deja `_activeRouteQuoteGeneration` en `null` — `_markCameraMovedByUser()` es un no-op en ese estado, así que no había nada con lo que el recentrado pudiera pelear.
+  - Verificación: `flutter analyze` limpio y **258/258 tests en verde** en el commit final (249 baseline + 9 nuevos/ajustados de las cuatro etapas).
+  - **Integración:** `test/home-flow-r1` avanzó `main` de `ce3680a` a `45dcff24379e09b42662b5c2bbcbdf90ddf955d1` mediante `git merge --ff-only`, sin merge commit; push a `origin/main` confirmado. Contención total verificada (`git merge-base --is-ancestor` de los cuatro commits, `main`/`origin/main`/`test/home-flow-r1`/`origin/test/home-flow-r1` en el mismo hash) antes de borrar la rama con `git branch -d` (nunca `-D`) y `git push origin --delete`. `main` y `origin/main` quedaron en `45dcff2`; la rama de trabajo ya no existe local ni remotamente.
+  - **Verificado en emulador por JuanJo**: back/"Quitar destino" vuelve a Home vacío con la cámara recentrada en el origen al zoom de entrada, sin necesidad de un gesto manual del pasajero.
+  - **No corregido a propósito** (ver `App-passenger/errores-conocidos.md`): el pin del destino queda tapado por la tarjeta flotante mientras se calcula la tarifa — transitorio, la cámara reencuadra en cuanto llega la cotización y el pin vuelve a quedar visible.
+  - **No tocado**: tipografía ni medidas de `home_screen.dart` (siguen sin migrar al sistema de diseño, ver `HOME-DESIGN-R1-PARCIAL`), el resto de pantallas del Passenger, Backend, Admin Web, Driver, Railway, producción.
+  - **VEREDICTO: `HOME-FLOW-R1 FINAL-CLOSED-ON-MAIN`.**
 
 ---
 
