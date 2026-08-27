@@ -1206,6 +1206,30 @@ del endpoint (`fares/origin-address`, ver `ORIGIN-ADDRESS-R1`). Se
 decidió dejarla fuera de este checkpoint y tratarla como un checkpoint
 aparte cuando se aborde, en vez de agregarla de paso aquí.
 
+**8. El recentrado al limpiar el destino (punto 3) NO entra en
+conflicto con la protección de gesto manual existente
+(`_cameraMovedByUserSinceRouteFit`, `HOME-LAYOUT-R1`).**
+`_clearDestination()` invoca `_advanceDestinationGeneration()` **antes**
+de mover la cámara — esa llamada invalida cualquier reencuadre de ruta
+pendiente y deja `_activeRouteQuoteGeneration` en `null`, lo que
+neutraliza el estado de gesto manual: `_markCameraMovedByUser()` es un
+no-op mientras esa generación es `null`, así que no queda ningún ajuste
+automático activo con el que el recentrado pudiera pelear.
+
+Por qué:
+Ninguna de las dos reglas tuvo que ceder ni reescribirse — el orden en
+que ya corría el código (invalidar generación de ruta, después mover la
+cámara) resultaba en que la protección de gesto manual simplemente no
+aplicaba en este punto del flujo, sin necesidad de un caso especial
+nuevo ni de tocar `_markCameraMovedByUser()`.
+
+Verificado en emulador por JuanJo, específicamente para confirmar que
+este recentrado no rompía la protección de gesto en el resto de los
+casos que sí la usan: mover el mapa a mano con una ruta activa y luego
+tocar el botón de recentrar sigue funcionando con normalidad — el botón
+sigue ganándole al gesto manual como acción explícita del pasajero,
+sin ninguna regresión introducida por el recentrado de `_clearDestination()`.
+
 Alternativas descartadas:
 
 - Mantener el campo de búsqueda inline dentro de la hoja de Home (el
