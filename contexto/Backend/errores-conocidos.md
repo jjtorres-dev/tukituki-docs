@@ -10,7 +10,7 @@ Commit analizado:
 29fe187aa31f5aad2db20ecd49534a218b358ab6
 
 Última actualización:
-2026-08-18 (refrescado tras el cierre de `CROSS-APP-R4.3`, fast-forward de `test/r4-ride-identities` a `main`)
+2026-08-27 (agregado el multiplicador nocturno configurado pero muerto, `PAYMENT-METHOD-CONTRACT-R1`)
 
 Fuente de verdad:
 Este documento es contexto auxiliar. Si contradice al código actual,
@@ -73,6 +73,25 @@ Ninguno de estos logs indica una prueba fallida; los 401 tests terminan en verde
 - **Ni `tukituki-driver-app` ni `tukituki-passenger-app` pueden hacer un fetch de imagen autenticado** (confirmado por auditoría de código en STORAGE-R2.1): ambas apps cargan cualquier `photoUrl` con `Image.network(url)` plano, sin `headers`, sin `cached_network_image` ni ningún cliente de imágenes envuelto en Dio. Esto es una restricción real de diseño para cualquier futuro endpoint de foto/imagen: no puede exigir `Authorization` en el header sin antes modificar Flutter — la autorización tiene que viajar en la propia URL (query param firmado, como el capability token de avatares) o el flujo se rompe silenciosamente (imagen no carga, sin error visible más allá del `errorBuilder` de cada widget).
 - No se encontraron comentarios `TODO`/`FIXME`/`HACK`/`XXX` en `src/` en este análisis (búsqueda exhaustiva con `Grep`); no hay deuda técnica marcada explícitamente en el código para priorizar.
 - **`POST /places/autocomplete` (y `GET /places/:placeId`) no tienen ningún límite de tasa dedicado** — solo el throttle global por IP (`RATE_LIMIT_*`), igual que cualquier otro endpoint. Es el mismo perfil de riesgo que motivó el límite dedicado por usuario de `GET /fares/origin-address` (`ORIGIN_ADDRESS_RATE_LIMIT_MAX`, ver `decisiones.md`, entrada `ORIGIN-ADDRESS-R1`): ambos pagan a Google por llamada. La diferencia real es que `places/autocomplete` se autolimita por la velocidad de tecleo humano (un usuario no puede generar más de unas pocas requests por segundo escribiendo), mientras que `origin-address` se dispara automáticamente sin input humano directo — por eso este último sí recibió protección dedicada y `places` no. Identificado como pendiente al implementar `ORIGIN-ADDRESS-R1` (2026-08-24); no se tocó `places` en ese checkpoint — queda registrado aquí como candidato a la misma protección si en el futuro se justifica (p. ej. si se detecta abuso real o el patrón de uso cambia).
+
+## Multiplicador nocturno de tarifa configurado pero nunca aplicado (2026-08-27)
+
+Estado:
+CONFIGURADO Y MUERTO — no es un bug de cálculo, es una entrada que ningún cliente activa hoy.
+
+Qué se observó:
+La `FareRule` activa en STAGING ("Tarifa estándar Tarapoto Staging") tiene `nightMultiplier: 2.00` — un valor real, no un placeholder. `FaresService.estimate` sí sabe aplicarlo: multiplica el subtotal cuando el request de `POST fares/estimate` trae `isNight: true`. El problema está del lado del cliente: la Passenger app (`fare_repository.dart`) manda `isNight` **hardcodeado en `false`** en cada llamada — no hay ninguna detección real de horario (ni por reloj del dispositivo ni por hora de servidor) que decida ese valor.
+
+Consecuencia:
+Ningún viaje real aplica hoy el multiplicador nocturno, sin importar la hora a la que se pida. El valor `2.00` configurado en la regla es efectivamente invisible en la práctica — un pasajero que pide un viaje a la 1 a.m. paga la misma tarifa base que a mediodía.
+
+Qué falta para activarlo (no evaluado ni implementado, solo identificado):
+- Decidir la fuente de verdad de "es de noche": hora del servidor Backend en el momento de `estimate` (más confiable, evita manipulación del reloj del dispositivo) vs. algún dato ya presente en el request.
+- Si se decide que el Backend lo derive server-side, `FaresService.estimate` dejaría de depender de que el cliente mande `isNight` en absoluto — cambio de contrato menor (el campo del DTO pasaría a ignorarse o eliminarse).
+- Ídem para `rainMultiplier` (mismo mecanismo, mismo problema: depende de `isRaining`, que la app tampoco deriva de ningún dato real — no se auditó específicamente su origen, pero por el mismo patrón de `isNight` es candidato a tener el mismo estado).
+
+Evidencia:
+`src/modules/fares/fares.service.ts` (`estimate`, aplicación de `nightMultiplier`/`rainMultiplier`), `src/modules/fares/entities/fare-rule.entity.ts`; Passenger app `lib/features/fare/data/fare_repository.dart` (líneas donde se arma el request de `fares/estimate`, `isNight`/`isRaining` hardcodeados en `false`). Ver `decisiones.md`, entrada "Multiplicador nocturno de `FareRule` configurado en 2.00 pero nunca aplicado".
 
 ## [PENDIENTE: no se pudo determinar...]
 

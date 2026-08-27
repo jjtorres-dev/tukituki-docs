@@ -10,7 +10,7 @@ Commit analizado:
 1e029a3ea5aded92cac21dcd4f5996e7bc167bff
 
 Última actualización:
-2026-08-16
+2026-08-27
 
 Fuente de verdad:
 Este documento es contexto auxiliar. Si contradice al código actual,
@@ -525,3 +525,92 @@ Primer consumidor real de negocio de la identidad compacta: Passenger y Driver A
 
 Evidencia:
 `src/modules/rides/utils/last-name-initial.util.ts`(`.spec.ts`), `src/modules/rides/dto/driver-active-ride-response.dto.ts`, `src/modules/rides/dto/driver-ride-offer-response.dto.ts`, `src/modules/rides/dto/passenger-ride-response.dto.ts`, `src/modules/rides/dto/passenger-ride-offer-response.dto.ts`, `src/modules/rides/ride-view.service.ts`(`.spec.ts`), `src/modules/rides/driver-ride-offers.service.ts`(`.spec.ts`), `src/modules/rides/passenger-rides.service.ts`. 629/629 tests PASS, lint limpio.
+
+---
+
+## `PAYMENT-METHOD-CONTRACT-R1`: el método de pago es referencial, no transaccional — expuesto al conductor antes de aceptar
+
+Estado:
+**FINAL-CLOSED-ON-MAIN.** Commit `3962379f76ae2320970938b4e59e1ca3f03bab12` ("feat: expose payment method in driver-facing ride offer contracts"), integrado a `main`@`3962379f` mediante fast-forward puro (2026-08-27). `npm run lint:check` limpio, 90/90 suites, 638/638 tests. Verificado desplegado en Railway STAGING: `paymentMethod` aparece en el esquema de `DriverRideOfferRideDto` en `/docs` con el enum `CASH | YAPE | PLIN | CARD`. `test/payment-method-contract` eliminada (local y remota) tras confirmar contención total. Ver `historial-checkpoints.md` para el detalle de integración.
+
+Qué se decidió:
+
+**1. El método de pago es puramente referencial — no hay pasarela ni intermediación.** El pasajero le paga directo al conductor (efectivo, Yape o Plin, persona a persona); TukiTuki no procesa ni retiene ese cobro. El campo `paymentMethod` que ahora recibe el conductor sirve solo para que sepa de antemano con qué método le van a pagar — la app registra el método elegido únicamente para llevar control, no para ejecutar ninguna transacción. **Izipay se mantiene apagado a propósito** (`IZIPAY_ENABLED` sin tocar en este checkpoint) — la infraestructura de cobro digital ya existe en el código (`DigitalPaymentsService`, ver auditoría previa), pero conectarla es una decisión de producto aparte, no implícita en exponer este campo.
+
+**2. El enum `PaymentMethod` conserva `CARD` aunque el selector que se construya del lado Passenger solo vaya a mostrar `CASH`/`YAPE`/`PLIN`.** No se elimina el valor del enum ni se restringe a nivel de Backend.
+
+Por qué:
+El enum es el contrato de datos; el selector visual es interfaz — no tienen que coincidir 1:1. Quitar `CARD` del enum exigiría una migración (`ALTER TYPE ... DROP VALUE` no existe en Postgres de forma directa; requeriría recrear el tipo) para eliminar un valor que hoy no molesta a nadie. Si en el futuro se conecta una pasarela de tarjeta, el valor ya está disponible sin tocar el esquema otra vez.
+
+**3. El conductor debe ver el método de pago ANTES de aceptar o contraofertar, no solo al completar el viaje.** Por eso el campo se expuso en dos DTO, no uno: `DriverRideOfferRideDto` (solicitud entrante, `GET drivers/me/ride-offers/active`) y `DriverPendingProposalResponseDto` (contraoferta ya hecha, esperando al pasajero, `GET drivers/me/ride-offers/proposals/pending`) — los dos puntos donde el conductor todavía puede decidir si le conviene el viaje. Ya llegaba correctamente en `RideCompletionResponseDto` (al completar) y en `DriverActiveRideResponseDto` (viaje ya asignado) desde antes de este checkpoint; ese tramo no se tocó.
+
+Por qué:
+Si el pasajero elige Yape y el conductor no tiene Yape, ese viaje no le conviene — pero enterarse recién al completar el viaje es demasiado tarde: ya lo aceptó, ya llegó, ya lo hizo. Mostrarlo antes de responder le permite declinar (o simplemente no contraofertar) un viaje cuyo método de pago no maneja.
+
+Alternativas descartadas:
+
+- Restringir el enum `PaymentMethod` a los 3 valores que el selector del Passenger va a mostrar (`CASH`/`YAPE`/`PLIN`), quitando `CARD` — descartada por requerir una migración para eliminar un valor que no genera ningún problema quedándose (ver punto 2).
+- Exponer el método de pago únicamente en `DriverActiveRideResponseDto` (post-asignación), ya que técnicamente ahí ya llegaba sin cambios — descartada explícitamente: el momento en que más importa es antes de aceptar, no después (ver punto 3).
+- Habilitar Izipay o construir lógica de cobro digital como parte de este checkpoint, ya que el enum incluye `YAPE`/`PLIN` — descartada explícitamente por alcance: este checkpoint es solo el contrato de lectura del conductor, no el cobro (ver punto 1).
+
+Evidencia:
+`src/modules/rides/dto/driver-ride-offer-response.dto.ts` (`DriverRideOfferRideDto.paymentMethod`), `src/modules/rides/dto/driver-pending-proposal-response.dto.ts` (`DriverPendingProposalResponseDto.paymentMethod`), `src/modules/rides/driver-ride-offers.service.ts` (`mapOffer`, `mapPendingProposal`). Commit `3962379f`. Auditoría previa de solo lectura que identificó el tramo roto (sin commit propio, investigación conversacional 2026-08-27): confirmó que `Ride.paymentMethod`/`RidePayment.method` ya existían persistidos, que el Passenger ya podía enviar el método al crear el ride (`CreatePassengerRideDto.paymentMethod`) pero la app mandaba `'CASH'` hardcodeado, y que `RideCompletionResponseDto`/`DriverActiveRideResponseDto` ya lo exponían correctamente antes de este checkpoint.
+
+---
+
+## `minimumFare` de la regla activa de tarifas bajado de 5.00 a 3.00 (STAGING, ajuste manual sin migración)
+
+Estado:
+ACTIVA (ajuste de datos, no de esquema — aplicado directamente en la base de STAGING el 2026-08-27).
+
+Qué se decidió:
+El campo `minimumFare` de la única `FareRule` activa en STAGING (nombre de la regla: **"Tarifa estándar Tarapoto Staging"**) se cambió de `5.00` a `3.00` (PEN) mediante `UPDATE` directo sobre la tabla `fare_rules` — **no** mediante una migración de TypeORM. El resto de la fórmula (`baseFare: 2.00`, `pricePerKm: 1.20`, `pricePerMinute: 0.10`, `bookingFee: 0.50`) no se tocó.
+
+Por qué:
+Decisión de producto: el pasajero negocia directamente el precio con el conductor (`passengerOfferFare`, ver la decisión de negociación bidireccional más arriba en este documento) — el piso no necesita ser conservador para "proteger" un precio sugerido que ya no se muestra (ver la entrada siguiente, tarifa sugerida diferida). `3.00` soles se consideró el piso realista para una carrera corta dentro de Tarapoto.
+
+Por qué sin migración:
+Es un cambio de **datos** de una fila de configuración administrable (`FareRule` ya tiene su propio CRUD vía `admin/fare-rules`, pensado exactamente para este tipo de ajuste), no un cambio de **esquema**. La regla "nunca `synchronize`, todo por migración" (ver la primera entrada de este documento) aplica a la estructura de las tablas, no a los valores de negocio que esas tablas administran — no hay ninguna migración de TypeORM que exista solo para poblar/actualizar una fila de configuración operativa.
+
+Pendiente explícito:
+**Producción necesitará su propia `FareRule`** cuando se monte ese ambiente — "Tarifa estándar Tarapoto Staging" es, por nombre y por dato, específica de STAGING. No hay todavía ninguna regla equivalente preparada para producción, ni un proceso definido de cómo se replicará este ajuste (u otro) allá.
+
+Alternativas descartadas:
+Crear una migración de datos (`INSERT`/`UPDATE` dentro de un archivo de migración de TypeORM) para dejar rastro versionado del cambio — no se usó en este ajuste puntual; queda como opción a considerar si este tipo de cambio de configuración empieza a repetirse con frecuencia y se vuelve valioso tener su historial en el propio control de versiones del esquema.
+
+Evidencia:
+Tabla `fare_rules` (columna `minimum_fare`), regla `"Tarifa estándar Tarapoto Staging"`, ambiente Railway STAGING. Sin commit ni archivo de migración asociado — cambio de datos puro, confirmado por JuanJo el 2026-08-27.
+
+---
+
+## Tarifa sugerida (`estimatedFare`): ya calculada y ya llega a la app, pero no se muestra — activación diferida a después de la prueba con usuarios reales
+
+Estado:
+ACTIVA — decisión de producto explícita, complementa (no reemplaza) la decisión ya registrada del lado Passenger de "no mostrar Precio recomendado TukiTuki" (ver `docs/contexto/App-passenger/decisiones.md` y `estado-actual.md` secciones 5/13).
+
+Qué se decidió:
+`estimatedFare` (`FareEstimateResponseDto`, `POST fares/estimate`) existe, se calcula en tiempo real a partir de la `FareRule` activa y la distancia/duración reales de Google Routes, y **ya llega** al modelo de dominio de la Passenger app (`FareEstimate.fromJson()` lo parsea sin problema). La app simplemente no lo lee en ningún punto de la UI de Home — confirmado por auditoría de código, sin ninguna referencia a `estimatedFare` en `home_screen.dart`. Esto no es un pendiente técnico: es la decisión de producto vigente, ahora verificada contra el código real (cerraba el `[PENDIENTE: verificar el copy exacto]` que quedaba abierto en `estado-actual.md`).
+
+**No se activa mostrarlo todavía.** Se retoma después de la prueba con usuarios reales, cuando existan datos reales de qué precios ofrecieron los pasajeros y cuáles terminaron aceptando los conductores.
+
+Por qué:
+La negociación la hacen las personas directamente (pasajero y conductor, sin intermediación de TukiTuki en el precio — ver la decisión de negociación bidireccional). Un número sugerido visible ancla la decisión del pasajero hacia ese valor, incluso si la fórmula no refleja bien la realidad del mercado local todavía. Antes de decidir si mostrarlo (y con qué framing, para no repetir el efecto "precio recomendado" que ya se descartó una vez) hace falta ver qué precios se ofrecen y aceptan de verdad en la práctica — esos datos son mejor base para calibrar tanto la fórmula como la decisión de mostrarla que seguir iterando la fórmula a ciegas.
+
+Alternativas descartadas:
+Mostrar `estimatedFare` ahora, ya que técnicamente el dato ya está disponible sin cambios de Backend — descartada explícitamente: la disponibilidad técnica del dato no es la razón por la que no se muestra; la razón es de producto (anclaje de precio) y no cambia por que el campo ya llegue.
+
+Evidencia:
+`src/modules/fares/dto/fare-estimate-response.dto.ts` (`estimatedFare`), `src/modules/fares/fares.service.ts` (`estimate`, fórmula completa), `src/modules/fares/entities/fare-rule.entity.ts`. Auditoría de solo lectura 2026-08-27 (sin commit propio): confirmó que el campo llega al modelo `FareEstimate` de la Passenger app y que `home_screen.dart` nunca lo referencia.
+
+---
+
+## Multiplicador nocturno de `FareRule` configurado en 2.00 pero nunca aplicado — la app manda `isNight` hardcodeado en `false`
+
+Estado:
+CONFIGURADO Y MUERTO — ver detalle completo en `errores-conocidos.md` (esta entrada es solo el puntero desde decisiones, para quien busque por qué el multiplicador nocturno no afecta ninguna tarifa real hoy).
+
+Qué se observó:
+La `FareRule` activa en STAGING tiene `nightMultiplier: 2.00` configurado, pero `FaresService.estimate` solo lo aplica cuando el request trae `isNight: true` — y la Passenger app manda ese campo hardcodeado en `false` (`fare_repository.dart`). En la práctica, ninguna cotización real aplica hoy el multiplicador nocturno, sin importar la hora real del viaje.
+
+Evidencia:
+Ver `errores-conocidos.md`.
