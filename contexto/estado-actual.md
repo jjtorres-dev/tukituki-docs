@@ -1,7 +1,7 @@
 # TukiTuki — Estado del proyecto
 
 Última actualización:
-2026-08-27
+2026-08-28
 
 Estado:
 ACTIVO
@@ -41,7 +41,7 @@ hecho vigente, remitiendo al historial para el detalle.
 |---|---|---|---|
 | Backend | `tukituki-backend` | `main` | `3962379f76ae2320970938b4e59e1ca3f03bab12` (`3962379f`) |
 | Admin Web | `tukituki-admin-web` | `main` | `989ffc42faef5788c18455993d2462285b4db18d` (`989ffc42`) |
-| Driver | `tukituki-driver-app` | `main` | `b1644518ecde354c9855fe513755cc7a0961eb7d` (`b164451`) |
+| Driver | `tukituki-driver-app` | `main` | `7581a1af562f090038b9afdd40158adcc8d02520` (`7581a1a`) |
 | Passenger | `tukituki-passenger-app` | `main` | `45dcff24379e09b42662b5c2bbcbdf90ddf955d1` (`45dcff2`) |
 
 ✅ **Verificado (2026-08-20)** contra `git branch --show-current` + `git rev-parse HEAD` reales de los cuatro repos, working tree limpio en los cuatro. Backend y Admin Web coincidían con lo que ya estaba registrado; Driver y Passenger se actualizaron — ambos habían avanzado el mismo día con la fusión de `R4.4B` (ver `historial-checkpoints.md`).
@@ -59,6 +59,8 @@ hecho vigente, remitiendo al historial para el detalle.
 ✅ **Backend actualizado (2026-08-27, `PAYMENT-METHOD-CONTRACT-R1` — FINAL-CLOSED-ON-MAIN)**: fast-forward puro de `test/payment-method-contract` → `main` (sobre `540153ff`); `main` y `origin/main` quedaron en `3962379f76ae2320970938b4e59e1ca3f03bab12`. Primer tramo de la cadena de tres repos para el selector de método de pago del pasajero: el conductor ahora ve `paymentMethod` (`CASH`/`YAPE`/`PLIN`/`CARD`) en la solicitud entrante (`DriverRideOfferRideDto`) y en sus contraofertas pendientes (`DriverPendingProposalResponseDto`), antes de decidir aceptar. Puramente referencial — sin pasarela, sin tocar Izipay. `npm run lint:check` limpio, 90/90 suites, 638/638 tests en verde. Verificado en Swagger de STAGING. Contención total confirmada antes de eliminar `test/payment-method-contract` local y remotamente. Detalle completo en `Backend/decisiones.md` y `historial-checkpoints.md`. **Los otros dos tramos siguen pendientes**: Driver App (leer/mostrar el campo, que ya llega en el JSON) y Passenger App (selector real, dejar de mandar `CASH` hardcodeado) — ver sección 5 y sección 17.
 
 ✅ **Driver actualizado (2026-08-27, `PAYMENT-METHOD-DRIVER-R1` — FINAL-CLOSED-ON-MAIN)**: fast-forward puro de `test/payment-method-driver` → `main` (sobre `2743274`); `main` y `origin/main` quedaron en `b1644518ecde354c9855fe513755cc7a0961eb7d`. Segundo tramo de la cadena de tres repos del método de pago: la Driver App por fin lee y muestra el `paymentMethod` referencial (`CASH`/`YAPE`/`PLIN`/`CARD`) que Backend ya enviaba desde `PAYMENT-METHOD-CONTRACT-R1` — chip nuevo `DriverPaymentMethodChip` en la parte siempre visible de la tarjeta de solicitud entrante y bajo "TARIFA ACORDADA" en el viaje activo, con acento ámbar del conductor y sin asumir `CASH` cuando el campo llega nulo. `flutter analyze` limpio, 840/840 tests en verde. **Verificado en teléfono real** por JuanJo (no solo emulador). Contención total confirmada antes de eliminar `test/payment-method-driver` local y remotamente. Detalle completo en `App-driver/decisiones.md` e `historial-checkpoints.md`. **Falta el último tramo**: el selector real en la Passenger App (dejar de mandar `CASH` hardcodeado).
+
+✅ **Driver actualizado (2026-08-28, `DRIVER-COMPLETION-EXIT-R1` — FINAL-CLOSED-ON-MAIN)**: fast-forward puro de `test/driver-completion-exit` → `main` (sobre `b164451`); `main` y `origin/main` quedaron en `7581a1af562f090038b9afdd40158adcc8d02520`. Corrige una pantalla sin salida: "Viaje completado" (`driver_ride_completion_view.dart`, compartida por el flujo en vivo y el restore server-side) no ofrecía ninguna acción cuando el pago no era efectivo pendiente (YAPE/PLIN/CARD, o efectivo ya en `PAID`/`FAILED`/`VOIDED`) — el conductor quedaba atrapado y la única salida era forzar el cierre de la app. Se agregó un botón "Volver al inicio" (`context.go('/home')`, mismo estilo que el ya existente en `driver_cash_payment_screen.dart`) como fallback general: junto al aviso de no-efectivo cuando el método no es `CASH`, y solo —sin el aviso— cuando es `CASH` pero su estado ya no es `PENDING`. El caso `CASH` + `PENDING` sigue mostrando únicamente "Cobrar efectivo", sin regresión. `flutter analyze` limpio, 846/846 tests en verde (840 baseline + 6). **Verificado en teléfono real** por JuanJo en los cuatro casos (YAPE en vivo, efectivo pendiente sin regresión, efectivo ya pagado, y restore tras cerrar/reabrir con YAPE pendiente). Contención total confirmada antes de eliminar `test/driver-completion-exit` local y remotamente. Detalle completo en `App-driver/decisiones.md` e `historial-checkpoints.md`.
 
 El detalle de cómo se llegó a cada uno de estos commits (checkpoints,
 fast-forwards, smoke tests, limpieza de ramas) está en

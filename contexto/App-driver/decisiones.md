@@ -626,3 +626,25 @@ Backend, `PaymentMethod` (sigue con sus 4 valores), el flujo de `RidePayment`/co
 
 Evidencia:
 `lib/features/driver/presentation/driver_payment_method_chip.dart` (widget nuevo), `lib/features/driver/domain/driver_ride_offer.dart` (`paymentMethod`), `lib/features/driver/domain/driver_active_ride.dart` (`paymentMethod` + `_tryParseNonEmptyString`), `lib/features/driver/presentation/driver_home_screen.dart`, `lib/features/driver/presentation/driver_active_ride_screen.dart`. Tests: `test/features/driver/presentation/driver_payment_method_chip_test.dart` (nuevo), casos añadidos en `test/driver_ride_offer_test.dart` y `test/features/driver/domain/driver_active_ride_test.dart`. Commit `b164451`, `main`@`b1644518ecde354c9855fe513755cc7a0961eb7d`.
+
+---
+
+## `DRIVER-COMPLETION-EXIT-R1` — Salida "Volver al inicio" en "Viaje completado" para todo caso sin cobro pendiente (2026-08-28)
+
+Estado:
+**FINAL-CLOSED-ON-MAIN.** Integrado a `main`@`7581a1af562f090038b9afdd40158adcc8d02520` mediante fast-forward puro, tras verificación en **teléfono real** de JuanJo en los cuatro casos (YAPE en vivo, efectivo pendiente sin regresión, efectivo ya pagado, restore tras cerrar/reabrir con YAPE pendiente). `flutter analyze` limpio, 846/846 tests en verde (840 baseline + 6). `test/driver-completion-exit` eliminada local y remotamente tras confirmar contención total.
+
+Qué se decidió:
+La pantalla "Viaje completado" (`driver_ride_completion_view.dart`) muestra un botón "Volver al inicio" (`context.go('/home')`, back stack limpio) siempre que no haya una acción de cobro pendiente: junto al aviso de no-efectivo cuando el método ≠ `CASH`, y solo —sin el aviso— cuando el método es `CASH` pero su estado ya no es `PENDING` (`PAID`/`FAILED`/`VOIDED`). El botón reutiliza el estilo del CTA de cierre que ya existía en `driver_cash_payment_screen.dart` (`FilledButton.icon` verde, ícono de casa, label con padding vertical 16). El caso `CASH` + `PENDING` no cambia: sigue mostrando únicamente "Cobrar efectivo". La navegación se pasa por callback (`onGoHome`), sin importar `go_router` dentro de la vista compartida — mismo patrón que ya usaba `onCollectCash`.
+
+Por qué:
+Antes, esa pantalla solo tenía una acción para el caso `CASH` + `PENDING`. En cualquier otro caso no ofrecía forma de salir y el conductor quedaba atrapado: la única salida era forzar el cierre de la app. (Reabrir sí devolvía a Home porque el restore de `driver_home_screen.dart` filtra por `selectMostRecentCashPendingPayment`, que para no-efectivo da `null`.)
+
+Alternativas descartadas:
+Cubrir solo el caso no-efectivo (YAPE/PLIN), dejando el botón dentro de la rama `else if (paymentMethod != 'CASH')`. Descartado a favor de un fallback general (Opción B): el mismo dead-end existe también para un viaje en efectivo cuyo pago ya no está `PENDING` (`PAID`/`FAILED`/`VOIDED`), un caso raro pero real; un `else` final cubre toda la clase de estados "sin acción de cobro" con un único widget, en vez de dejar un segundo hueco equivalente sin resolver.
+
+Explícitamente NO tocado:
+`driver_home_screen.dart` y su lógica de restore, el router, el caso `CASH` + `PENDING`, la pantalla de cobro en efectivo (solo se replicó su estilo de botón), Backend, Passenger App, Admin Web, Railway, producción.
+
+Evidencia:
+`lib/features/driver/presentation/driver_ride_completion_view.dart` (`onGoHome`, `_GoHomeButton`, ramas de acción reestructuradas), `lib/features/driver/presentation/driver_active_ride_screen.dart` (`_buildCompletionScreen`), `lib/features/driver/presentation/driver_completed_payment_screen.dart` (`build`). Tests: `test/features/driver/presentation/driver_active_ride_screen_test.dart` (test `J` renombrado y ampliado, más `J2`/`J3`/`J4`/`K`), `test/features/driver/presentation/driver_completed_payment_screen_test.dart` (dos casos nuevos para el restore no-efectivo). Commit `7581a1a`, `main`@`7581a1af562f090038b9afdd40158adcc8d02520`.
