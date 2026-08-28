@@ -53,6 +53,10 @@ el código y los tests tienen prioridad.
 
 `[PENDIENTE: no se ejecutó `flutter test --coverage`]` — no hay evidencia en el repo (sin badge, sin config de coverage) de qué porcentaje del código está cubierto; solo se verificó que los 804 tests existentes pasan.
 
+## Limitaciones aceptadas a propósito
+
+- **La hoja de propuestas pendientes no muestra el método de pago** (`PAYMENT-METHOD-DRIVER-R1`, 2026-08-27): `_buildProposalsSheet` en `driver_home_screen.dart` (la pantalla "Propuesta enviada — Esperando que el pasajero elija a su conductor", tras hacer una contraoferta) NO muestra el chip de método de pago, aunque Backend sí lo envía en `DriverPendingProposalResponseDto`. Causa: el modelo `DriverPendingProposal` (`driver_pending_proposal.dart`) no tiene el campo `paymentMethod` ni lo parsea; el cambio de `PAYMENT-METHOD-DRIVER-R1` solo añadió el campo a `DriverRideOffer` (tarjeta de solicitud entrante) y `DriverActiveRide` (viaje activo). Se aceptó así a propósito: en ese estado el conductor ya decidió involucrarse con el viaje, y el método pesa más *antes* de aceptar/contraofertar que después. **Cómo cerrarlo si se quisiera** (cambio pequeño y autocontenido): agregar `paymentMethod` a `DriverPendingProposal` (campo + `fromJson`), pasarlo por `_proposalFromOffer()` en `driver_home_screen.dart`, y usar `DriverPaymentMethodChip` en `_buildProposalsSheet()` (y opcionalmente en los `Chip` por-propuesta del caso `count > 1`).
+
 ## Bugs resueltos durante el desarrollo del onboarding (histórico, ya corregidos y aprobados físicamente)
 
 Registrados aquí solo como referencia histórica — ninguno sigue activo en el commit analizado, verificado por regresión automatizada:

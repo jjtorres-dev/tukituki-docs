@@ -599,3 +599,30 @@ Evidencia:
 `lib/features/driver/presentation/driver_active_ride_screen.dart` (`_startActivityTimer()`); `test/features/driver/presentation/driver_active_ride_screen_test.dart`, grupo `'Checkpoint R4.4B: cadencia GPS de viaje activo (3s)'` (5 casos: cadencia real de 3s, guard contra fetch GPS concurrente, recuperación tras error de GPS, cancelación del timer en `dispose`, un fallo de `complete` (409) no duplica el scheduler). Commit `2743274900ef33374a76606b62ff841d476c232f`, rama `origin/test/r4-smooth-driver-marker`.
 
 **`PHYSICAL-REVIEW-PASS`** confirmado por JuanJo (2026-08-20, dispositivo real, campus universitario, terreno abierto y buena señal GPS): movimiento del marcador fluido y sin tirones en el caso base. Con esa aprobación, `test/r4-smooth-driver-marker` se fusionó a `main` por fast-forward puro — ver checkpoint `R4.4B` en `estado-proyecto.md` sección 16 para el detalle completo de la integración.
+
+---
+
+## `PAYMENT-METHOD-DRIVER-R1` — El conductor ve el método de pago referencial antes de decidir (2026-08-27)
+
+Estado:
+**FINAL-CLOSED-ON-MAIN.** Integrado a `main`@`b1644518ecde354c9855fe513755cc7a0961eb7d` mediante fast-forward puro, tras verificación en **teléfono real** de JuanJo (no solo emulador). `flutter analyze` limpio, 840/840 tests en verde. `test/payment-method-driver` eliminada local y remotamente tras confirmar contención total. Segundo tramo de la cadena de tres repos del método de pago (Backend cerró el primero en `PAYMENT-METHOD-CONTRACT-R1`); el selector real del pasajero sigue pendiente.
+
+Qué se decidió (decisiones de producto de JuanJo):
+
+1. **El método de pago se muestra en la parte SIEMPRE VISIBLE de la tarjeta de solicitud entrante**, sin necesidad de expandirla ni hacer scroll. Razón: el conductor tiene que verlo *antes* de aceptar o contraofertar. Si el pasajero eligió Yape y el conductor no tiene Yape, no debería tomar ese viaje — y esa decisión ocurre en la tarjeta compacta, no después de expandirla.
+2. **Si Backend no envía `paymentMethod`, no se muestra nada.** NO se asume `CASH` por defecto: inventar un valor sería peor que omitirlo (el conductor tomaría una decisión con un dato falso). `paymentMethod` es `String?` con parseo defensivo; vacío/nulo → el chip devuelve `SizedBox.shrink()`.
+3. **Se reutilizó el mapeo de etiquetas `paymentMethodLabel`** que ya existía en la pantalla de finalización (`driver_ride_completion_view.dart`), en vez de duplicarlo. La pantalla de finalización y la de cobro en efectivo no se tocaron — solo se importó su helper.
+4. **El chip usa la familia ámbar del conductor** (`DriverPalette.orangeDeep` para texto/ícono sobre un lavado de `DriverPalette.amber` al 18 %), el mismo par que ya usa `_RideStatusHeader` — nunca el verde del pasajero. Contraste verificado en pantalla real bajo condiciones de uso.
+
+Dónde se muestra:
+- Tarjeta de solicitud entrante (`driver_home_screen.dart`, `_buildOfferCard`): en la zona compacta siempre visible, versión `dense`.
+- Viaje activo (`driver_active_ride_screen.dart`): bajo `_FareCard` / "TARIFA ACORDADA" en los tres estados de la pantalla.
+
+Omisión aceptada a propósito:
+La hoja de propuestas pendientes (`_buildProposalsSheet`, "Propuesta enviada — Esperando que el pasajero elija a su conductor") NO muestra el método, aunque Backend sí lo envía en `DriverPendingProposalResponseDto`. `DriverPendingProposal` no tiene el campo ni lo parsea. En ese estado el conductor ya decidió involucrarse con el viaje; el método pesa más antes de aceptar. Ver `errores-conocidos.md` para el detalle y cómo cerrarlo si se quisiera.
+
+Explícitamente NO tocado:
+Backend, `PaymentMethod` (sigue con sus 4 valores), el flujo de `RidePayment`/cobro en efectivo, la pantalla de finalización, `DriverPendingProposal`, Passenger App, Admin Web, Railway, producción.
+
+Evidencia:
+`lib/features/driver/presentation/driver_payment_method_chip.dart` (widget nuevo), `lib/features/driver/domain/driver_ride_offer.dart` (`paymentMethod`), `lib/features/driver/domain/driver_active_ride.dart` (`paymentMethod` + `_tryParseNonEmptyString`), `lib/features/driver/presentation/driver_home_screen.dart`, `lib/features/driver/presentation/driver_active_ride_screen.dart`. Tests: `test/features/driver/presentation/driver_payment_method_chip_test.dart` (nuevo), casos añadidos en `test/driver_ride_offer_test.dart` y `test/features/driver/domain/driver_active_ride_test.dart`. Commit `b164451`, `main`@`b1644518ecde354c9855fe513755cc7a0961eb7d`.
