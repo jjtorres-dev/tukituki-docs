@@ -4,6 +4,8 @@ Definido el 20/08/2026 sobre las pantallas de login, registro y completar perfil
 
 Extendido el 26/08/2026 (`DESIGN-SYSTEM-R2`) a partir de la auditoría de `home_screen.dart` — primera pantalla del sistema con mapa a pantalla completa, chips tocables y texto sobre superficie oscura fuera del header. Los tokens de esta extensión están marcados `[R2]` donde corresponde. `DESIGN-SYSTEM-R2` solo agrega tokens — no migra ninguna pantalla.
 
+Extendido de nuevo el 31/08/2026 (`FARE-PANEL-R1`, cierre del checkpoint de 5 etapas) — panel de precio de Home y pantalla nueva `OfferFareScreen` ("Ofrece tu tarifa"). Tokens marcados `[FARE-PANEL-R1]` donde corresponde: `radioTarjeta`/`paddingTarjeta`/`espacioInternoTarjeta`, categoría "tarjeta de contenido". Esta extensión sí incluyó migración real de pantalla (a diferencia de `DESIGN-SYSTEM-R2`) — ver también la sección 5, "Tarjeta de origen/destino", y la nota sobre el campo de monto grande en "Campo de texto".
+
 Este documento es la fuente de verdad para todo lo visual. Cualquier color, tamaño o medida que se use en las apps tiene que salir de aquí. Si algo que necesitas no está definido, se decide y se agrega a este documento antes de escribirlo en el código.
 
 ---
@@ -124,7 +126,7 @@ Agregadas en `DESIGN-SYSTEM-R2` (2026-08-26) a partir de `home_screen.dart` ("¿
 | Valor del monto (`montoOferta`) | 27 | 800 |
 | Prefijo "S/ " (`prefijoMoneda`) | 19 | 700 |
 
-**Provisionales.** El campo de precio se rediseña por completo en el checkpoint de tarifa sugerida (ver `App-passenger/errores-conocidos.md`, "Campo de precio acepta texto libre") — estas dos escalas pueden cambiar o desaparecer cuando eso ocurra. No forman parte de la escala general de la tabla de arriba porque son específicas de ese único campo, no reutilizables en otro contexto.
+**Provisionales, pero ya sobrevivieron el rediseño que las iba a reemplazar.** `FARE-PANEL-R1` (2026-08-31) rediseñó el campo de precio de punta a punta (ver más abajo la nota de "Campo de texto" sobre el borde) — el texto libre que motivó la entrada original de `App-passenger/errores-conocidos.md` ("Campo de precio acepta texto libre") ya no existe, esa entrada quedó marcada resuelta. `montoOferta`/`prefijoMoneda` no solo sobrevivieron sino que se usan ahora en dos lugares: la cifra no editable del stepper de Home (sobre la tarjeta `verdeMarca`) y el monto grande editable de `OfferFareScreen` (sobre `crema`). Siguen sin entrar a la escala general de la tabla de arriba porque siguen siendo específicas de "una cifra grande de dinero", no reutilizables fuera de ese contexto — pero ya no son un experimento de un solo uso.
 
 ---
 
@@ -144,10 +146,17 @@ Agregadas en `DESIGN-SYSTEM-R2` (2026-08-26) a partir de `home_screen.dart` ("¿
 | Lado del checkbox | 24, radio 7 |
 | Radio de píldora/chip [R2] | 30 |
 | Radio de etiqueta de marcador [R2] | 11 |
+| Radio de tarjeta [FARE-PANEL-R1] | 20 |
+| Padding interno de tarjeta [FARE-PANEL-R1] | 16 |
+| Espaciado interno de tarjeta [FARE-PANEL-R1] | 8 |
 
 **Ningún elemento tocable mide menos de 44 de lado.** Los campos de 56 y los botones de 58 cumplen con margen.
 
 Los dos radios `[R2]` se agregaron en `DESIGN-SYSTEM-R2` (2026-08-26): el sistema solo contemplaba 14 (campos y botones) y 26 (hoja) porque se definió sobre pantallas sin mapa ni chips tocables. `radioPildora` (30) es la forma completamente redondeada de los chips sobre el mapa (métricas, destino sugerido). `radioEtiquetaMarcador` (11) es propio de la etiqueta que acompaña al marcador de origen — más chica y menos redondeada que una píldora, no reutilizable en otro elemento hoy.
+
+**`radioTarjeta` (20) se agregó en `FARE-PANEL-R1` (2026-08-27, etapa 2)** al reescribir el panel de precio de la hoja de Home y la tarjeta flotante origen/destino. Las dos superficies usaban literales sin intención de diseño (20 y 17 respectivamente) — el mismo caso que el `15` del campo de búsqueda que este documento ya señalaba como error. Se unifican en un solo token, `radioTarjeta` = 20 (el de la superficie más grande, el panel). No lo comparten campos ni botones (14), ni la hoja crema (26), ni los chips (30): es la esquina de una **tarjeta de contenido**, una categoría de superficie que el sistema no tenía antes de tener pantallas con tarjetas sobre el mapa.
+
+**`paddingTarjeta` (16) y `espacioInternoTarjeta` (8)** se agregaron en la misma etapa, al compactar el panel de precio: sus gaps verticales eran literales sueltos, sin ritmo reutilizable. `paddingTarjeta` es el padding interno de una tarjeta de contenido (panel de precio `verdeMarca`, tarjeta origen/destino, monto grande de `OfferFareScreen`); `espacioInternoTarjeta` es el gap tenue entre elementos apilados dentro de esa misma tarjeta. Los tres tokens de esta categoría (`radioTarjeta`/`paddingTarjeta`/`espacioInternoTarjeta`) ya se usan en tres archivos distintos al cierre de `FARE-PANEL-R1` (2026-08-31): el panel de precio y la tarjeta origen/destino de Home, y la pantalla `OfferFareScreen` completa — dejaron de ser exclusivos de una sola pantalla.
 
 ---
 
@@ -188,6 +197,10 @@ La etiqueta va **encima** del campo, en 13/600 `verdeMarca`. Así el interior de
 
 El placeholder muestra un ejemplo real del formato esperado (`987 654 321`), no una repetición de la etiqueta.
 
+**Excepción del borde `acento` sobre tarjeta oscura — OBSOLETA, sin ningún campo real al que aplicarle (`FARE-PANEL-R1`, cierre 2026-08-31).** Esta sección documentaba que el campo editable del monto en el panel de precio de Home, por vivir dentro de la tarjeta `verdeMarca`, debía usar borde activo `acento`/2px en vez del `verdeMarca`/1.5 estándar (un borde verde oscuro sobre fondo verde oscuro no se ve). La etapa 2 de `FARE-PANEL-R1` (2026-08-27) reemplazó ese campo de texto libre por un **stepper no editable** (`[ − S/ X.XX + ]`) dentro de la misma tarjeta — ya no hay ningún `TextField` ahí, así que la excepción no tiene a qué aplicarse. No queda, en ningún punto de la app, un campo editable sobre fondo oscuro. Si algún checkpoint futuro vuelve a poner un campo editable sobre `verdeMarca` u otra superficie oscura, retomar el razonamiento de contraste de este párrafo (mismo error que los íconos `acento` sobre `verdeMarca` de `HOME-DESIGN-R1`) en vez de asumir que `verdeMarca`/1.5 sigue sirviendo ahí.
+
+**Campo de monto grande — patrón nuevo, distinto de "Campo de texto" (`FARE-PANEL-R1`, etapa 4, rediseño visual, 2026-08-31).** El monto editable de `OfferFareScreen` ("Ofrece tu tarifa") vive sobre `crema`, así que en principio le tocaba el borde estándar `verdeMarca`/1.5 — pero no usa la caja completa de `TukiTextField` (fondo blanco + borde en las 4 esquinas): es una cifra grande (`montoOferta`/`prefijoMoneda`, ver sección 3) alineada a la izquierda, sin fondo ni borde propio, con una **línea divisoria debajo** en vez de un recuadro. Esa línea sí seguía la tabla de estados de "Campo de texto" aplicada a un solo borde en vez de a los cuatro: reposo 1px `bordeSuave`, activo 1.5px `verdeMarca`, error 1.5px `error`. Mismo criterio que ya usó este documento con "Barra de búsqueda" — una divergencia de **estructura**, no solo de valores, se resuelve con un widget propio en vez de forzar un flag nuevo dentro de `TukiTextField`.
+
 ### Barra de búsqueda [R2]
 
 Variante propia, distinta de "Campo de texto" — agregada en `DESIGN-SYSTEM-R2` (2026-08-26) a partir de la barra de búsqueda de destino de Home. **Decidido: no se fuerza al patrón de "Campo de texto"/`TukiTextField`.** Ese patrón (etiqueta encima, alto fijo 56, campo aislado) es el de un formulario — Login y Registro. La barra de búsqueda es otro patrón de uso: una única entrada flotante con lupa, sin etiqueta, cuyo contenido (resultados de autocompletado) crece debajo de ella.
@@ -214,6 +227,14 @@ Borde, igual criterio que "Campo de texto":
 **Pendiente de decidir en el checkpoint de implementación** (no en este, que solo documenta): el fondo exacto de la barra en reposo — hoy `home_screen.dart` usa un crema secundario (`#FBF7EA`) sin token propio; la migración debe forzarlo a `crema` o a un color ya existente, no inventar uno nuevo solo para esto salvo que se vea mal en pantalla.
 
 **Recomendación de implementación — parámetro de `TukiTextField` vs. componente separado**: recomiendo **componente separado** (p. ej. `TukiSearchBar`), no un parámetro nuevo en `TukiTextField`. Razón: `TukiTextField` construye su `Container` sobre un contrato fijo — alto 56 constante, layout de una sola fila con slots `prefix`/`suffix` genéricos, y un bloque de `errorText` condicional debajo. La barra de búsqueda no solo cambia valores (alto, radio) sino la estructura interna: necesita alto flexible, un ícono de posición fija (no un slot genérico), y dos estados mutuamente excluyentes a la derecha (carga/limpiar) en vez de un `suffix` libre — meterlo como flag booleano (`isSearchBar: true`) obligaría a `TukiTextField` a ramificar buena parte de su `build()` según ese flag, lo que en la práctica sería mantener dos componentes dentro de un mismo archivo con un `if` en el medio. Un widget separado que reutiliza los mismos tokens de color (`bordeCampo`, `verdeMarca`, `radioCampoBoton`) y el mismo criterio de foco/error es más simple de leer y de testear por separado. **Costo de la alternativa descartada** (parámetro en `TukiTextField`): evita un archivo nuevo, pero acopla dos formas visuales distintas a un mismo widget y hace más frágil cualquier cambio futuro a "Campo de texto" (hay que verificar que no rompa la rama de búsqueda). Si en la práctica la barra de búsqueda termina necesitando más comportamiento propio (debounce, lista de predicciones acoplada), un componente separado también da más margen para crecer sin forzar ese crecimiento dentro de `TukiTextField`.
+
+### Tarjeta de origen/destino [FARE-PANEL-R1]
+
+Superficie `crema` con borde `bordeSuave`, `radioTarjeta`, `paddingTarjeta` — dos filas (Origen/Destino) unidas por un conector punteado vertical. Usada en dos pantallas con implementaciones independientes, sin widget compartido (`_buildOriginDestinationCard` en `home_screen.dart` y en `offer_fare_screen.dart`): mismo lenguaje visual a propósito, no una casualidad — si cambia en una, cambiar en la otra.
+
+**Íconos (etapa 5, 2026-08-31, tomando solo la disposición de una referencia de InDriver, no sus colores):** Origen usa `Icons.person` dentro de un círculo `acento` de 20×20 (blanco sobre verde) — reemplaza a `Icons.my_location`. Destino usa `Icons.flag`, color `destino`, sin círculo (asimetría ya existente antes de este cambio, no la introduce) — reemplaza a `Icons.location_on`.
+
+**Una sola línea de dirección, siempre el nombre corto — nunca un subtítulo de dirección completa.** Antes de la etapa 5, la fila Destino podía mostrar título y subtítulo; en algunos caminos de selección (destino sugerido del historial) ambos terminaban siendo la misma cadena por un bug de asignación, duplicando el texto en pantalla. Se eliminó la segunda línea en las dos tarjetas. La única línea usa, por prioridad: el nombre corto real de Google Places (`primaryText`) cuando el destino viene de una búsqueda; si no hay nombre corto real (origen por reverse geocoding, destino elegido tocando el mapa, destino sugerido del historial), `shortAddressLabel()` (`lib/features/home/domain/short_address_label.dart`, recorte por la primera coma) como heurística de acortado. La dirección completa sigue viajando intacta a `fares/estimate` donde ya lo hacía — el acortado es puramente de presentación.
 
 ### Botón principal
 

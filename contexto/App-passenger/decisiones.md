@@ -1272,3 +1272,165 @@ JuanJo del recentrado al limpiar destino (punto 3) y del pin
 transitoriamente tapado por la tarjeta flotante durante el cálculo de
 tarifa (ver `App-passenger/errores-conocidos.md`, aceptado sin
 corregir).
+
+---
+
+## `FARE-PANEL-R1` — pantalla nueva devuelve resultado por `pop` en vez de llamar a `createRide` directamente (etapa 4, 2026-08-29)
+
+Estado:
+**FINAL-CLOSED-ON-MAIN**, integrado con el resto del checkpoint (ver
+`estado-actual.md` sección 7 e `historial-checkpoints.md`,
+`FARE-PANEL-R1`).
+
+Qué se decidió:
+`OfferFareScreen` ("Ofrece tu tarifa") no tiene acceso a
+`RideRepository` ni llama a `createRide` en ningún punto. Al tocar
+"Encontrar ofertas" hace `Navigator.pop(context, OfferFareResult(offerCents: ..., paymentMethod: ...))`;
+si el pasajero vuelve sin confirmar, hace `pop` sin resultado. Quien
+recibe ese resultado es `HomeScreen._openOfferFareScreen()`: actualiza
+`_offerCents`/`_paymentMethod` con `setState` y llama a
+`_requestRide()` — el mismo método que ya usaba el stepper del panel
+de precio, sin ninguna rama nueva.
+
+Por qué:
+`_requestRide()` ya tenía manejo de errores completo (guard de
+cotización vencida con auto-renovación, `try/on DioException/finally`,
+mensajes por `statusCode`, navegación a `/ride/:id`) — escrito y
+probado antes de que existiera esta pantalla. Si `OfferFareScreen`
+llamara a `createRide` por su cuenta, ese manejo de errores habría
+tenido que duplicarse (o `OfferFareScreen` habría necesitado conocer
+`RideRepository`, el `quoteId` vigente y el estado de vencimiento de
+la cotización, información que hoy vive únicamente en `HomeScreen`).
+Devolver un resultado chico y dejar que Home decida es el mismo patrón
+que ya usaba `SearchDestinationScreen`/`SearchDestinationResult` desde
+`HOME-FLOW-R1` — no se inventó uno nuevo para esta pantalla.
+
+Alternativas descartadas:
+- `OfferFareScreen` con su propio `RideRepository` inyectado, llamando
+  a `createRide` directamente al confirmar — descartada por la
+  duplicación de manejo de errores explicada arriba, y porque la
+  pantalla dejaría de ser una simple confirmación de valores para
+  pasar a conocer el ciclo de vida completo de la creación de un ride.
+- Pasarle a `OfferFareScreen` una referencia/callback a
+  `_requestRide()` de Home para que la invoque ella misma antes de
+  hacer `pop` — descartada: mezclaría "esta pantalla confirma valores"
+  con "esta pantalla dispara efectos secundarios en la pantalla
+  anterior todavía montada", más difícil de razonar y de testear en
+  aislamiento que un `pop` con datos.
+
+Evidencia:
+`lib/features/home/offer_fare_screen.dart` (`_confirm`),
+`lib/features/home/domain/offer_fare_result.dart`,
+`lib/features/home/home_screen.dart` (`_openOfferFareScreen`,
+`_requestRide`), `test/features/home/offer_fare_screen_test.dart`,
+`test/features/home/home_screen_test.dart` (grupo `FARE-PANEL-R1 —
+stepper de precio y Mototaxi`, casos de round-trip completo y de back
+sin confirmar).
+
+---
+
+## `FARE-PANEL-R1` — las tarjetas de origen/destino muestran siempre una sola línea, el nombre corto (etapa 5, 2026-08-31)
+
+Estado:
+**FINAL-CLOSED-ON-MAIN**, ver `historial-checkpoints.md`,
+`FARE-PANEL-R1`.
+
+Qué se decidió:
+La fila "Destino" de las dos tarjetas de origen/destino (Home y
+`OfferFareScreen`) dejó de tener un subtítulo condicional de dirección
+completa — ahora siempre es una sola línea. Esa línea usa, por
+prioridad: el nombre corto real de Google Places (`primaryText`)
+cuando el destino viene de una búsqueda; si no existe un nombre corto
+real (origen por reverse geocoding, destino elegido tocando el mapa,
+destino sugerido del historial), la heurística `shortAddressLabel()`
+(corte por la primera coma) como fallback. La dirección completa
+(`_selectedDestinationAddress`) se conserva intacta donde ya
+alimentaba `fares/estimate` — el cambio es puramente de qué se
+muestra, no de qué se envía a Backend.
+
+Por qué:
+Investigación previa a la implementación encontró que el duplicado
+visible en pantalla (título y subtítulo mostrando la misma cadena) no
+era uniforme: en el camino de destino sugerido del historial
+(`_selectSuggestedDestination`) era un bug real — el mismo campo
+completo se asignaba a `_selectedDestinationName` y a
+`_selectedDestinationAddress` por error; en el camino de destino
+elegido en el mapa ya resuelto por Backend no había duplicado, pero
+tampoco nombre corto (la dirección completa se mostraba como único
+título); en el camino de búsqueda ya había dos campos genuinamente
+distintos. Se decidió unificar los tres caminos bajo la misma regla
+("una línea, siempre corta") en vez de arreglar solo el bug de
+asignación y dejar el resto de los caminos con dirección completa
+como título — mostrar a veces un nombre corto y a veces una dirección
+completa larga como título, según de qué camino vino el destino,
+habría sido una inconsistencia visual nueva, no una solución completa.
+
+Alternativas descartadas:
+- Arreglar únicamente la asignación duplicada de
+  `_selectSuggestedDestination` y dejar el resto de los caminos tal
+  cual (mapa resuelto mostrando dirección completa como título,
+  búsqueda con su subtítulo de dirección completa) — descartada por la
+  inconsistencia explicada arriba.
+- Pedir a Backend un campo de nombre corto real para origen/destino
+  por mapa/sugerido, en vez de una heurística de acortado en el
+  cliente — investigado y descartado para este checkpoint: el backend
+  (`google-geocoding.service.ts`) hoy descarta el `address_components`
+  que Google sí devuelve; agregar el campo es la solución correcta a
+  futuro pero está fuera de alcance de esta app (ver
+  `App-passenger/errores-conocidos.md`, entrada de la referencia rota
+  encontrada durante esta misma investigación).
+
+Evidencia:
+`lib/features/home/domain/short_address_label.dart`,
+`lib/features/home/home_screen.dart` (`_selectSuggestedDestination`,
+bloque de resolución dentro de `_estimateFare`,
+`_buildOriginDestinationCard`), `lib/features/home/offer_fare_screen.dart`
+(`_buildOriginDestinationCard`), `test/features/home/home_screen_test.dart`
+(casos `G4B-R5.2-1`/`G4B-R5.2-3` ajustados, caso nuevo del grupo
+`SUGGESTED-DESTINATIONS-R1` sobre el duplicado). `flutter analyze`
+limpio, 298/298 tests en verde.
+
+---
+
+## `FARE-PANEL-R1` — `PaymentMethodPickerSheet` extraído a un archivo compartido en vez de duplicarse (etapa 4, 2026-08-29)
+
+Estado:
+**FINAL-CLOSED-ON-MAIN**, ver `historial-checkpoints.md`,
+`FARE-PANEL-R1`.
+
+Qué se decidió:
+La hoja del selector de método de pago, antes una clase privada
+(`_PaymentMethodPickerSheet`) de `home_screen.dart`, se movió a
+`lib/features/ride/presentation/payment_method_picker_sheet.dart`
+como `PaymentMethodPickerSheet` pública, sin cambiar su contrato
+(recibe el método actual, hace `Navigator.pop(context, method)` por
+opción tocada). Tanto `HomeScreen` como `OfferFareScreen` la importan
+y la abren con el mismo `showModalBottomSheet`.
+
+Por qué:
+Al construir `OfferFareScreen` (etapa 4), esa pantalla necesitaba el
+mismo selector que ya existía en Home. Copiar la clase privada a un
+segundo archivo habría dejado dos copias del mismo widget para
+mantener sincronizadas manualmente cada vez que cambie una opción de
+pago, un ícono o el estilo de la hoja — el mismo tipo de duplicación
+que este repositorio ya evitó extrayendo `TukiSearchBar`/`TukiTextField`
+a `core/widgets/` en checkpoints anteriores. Se ubicó en
+`ride/presentation/` (no en `core/widgets/`) porque depende
+directamente de `PaymentMethod` (`ride/domain/payment_method.dart`) —
+no es un componente de sistema de diseño genérico sin dominio propio
+como sí lo son `TukiTextField`/`TukiSearchBar`/`GradientHeaderSheet`.
+
+Alternativas descartadas:
+- Duplicar la clase en `offer_fare_screen.dart` — descartada por el
+  riesgo de divergencia silenciosa explicado arriba.
+- Ubicarla en `core/widgets/` junto a los demás componentes
+  compartidos — descartada porque, a diferencia de esos componentes,
+  esta hoja sí tiene una dependencia de dominio concreta
+  (`PaymentMethod`); se prefirió agruparla con el resto del dominio de
+  pago (`PaymentPreferenceRepository`, también en `ride/`).
+
+Evidencia:
+`lib/features/ride/presentation/payment_method_picker_sheet.dart`,
+`lib/features/home/home_screen.dart` (`_openPaymentMethodPicker`),
+`lib/features/home/offer_fare_screen.dart` (`_openPaymentMethodPicker`),
+`test/features/ride/presentation/payment_method_picker_sheet_test.dart`.

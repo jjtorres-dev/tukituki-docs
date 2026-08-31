@@ -47,6 +47,8 @@ de trabajo pendiente (ver `passenger_ride.dart:72-83`,
 
 - **Inconsistencia conocida (2026-08-20) — referencia a un `AGENTS.md` que no existe en este repositorio**: el comentario de `_handleDriverLocationUpdate()` en `lib/features/ride/presentation/ride_searching_screen.dart` (línea ~3278, checkpoint `R4.4B`, ver `decisiones.md`) dice textualmente "Reglas (ver AGENTS.md R4.4B)", pero no existe ningún archivo `AGENTS.md` en la raíz de `tukituki-passenger-app` (confirmado por búsqueda directa — tampoco existe en `tukituki-driver-app`, que tiene el mismo patrón de comentario en `driver_active_ride_screen.dart`). No se creó el archivo ni se editó el comentario como parte de esta auditoría documental (son cambios de código, fuera de su alcance) — queda registrado aquí como rastro para quien retome `R4.4B`.
 
+- **Inconsistencia encontrada y corregida en la fuente (`FARE-PANEL-R1`, etapa 5, 2026-08-31) — referencia rota a `App-passenger/decisiones.md`**: el doc-comment de la heurística de acortado de direcciones (`_shortAddressLabel`, agregada en `HOME-LAYOUT-R1`) decía "ver `App-passenger/decisiones.md` para el detalle del costo estimado" de agregar un campo de nombre corto en Backend — esa entrada nunca existió en `decisiones.md` (búsqueda exhaustiva, sin resultados), mismo patrón que la referencia rota a `AGENTS.md` de arriba. Al extraer la función a `lib/features/home/domain/short_address_label.dart` en esta etapa, la referencia rota se reemplazó por una nota honesta ("agregar ese campo requeriría tocar `google-geocoding.service.ts`, fuera de alcance de esta app") en vez de arrastrarla. **Pendiente real, no bloqueante**: si en algún momento se decide evaluar agregar ese campo corto en Backend, esa evaluación de costo todavía no está escrita en ningún lado — habría que escribirla desde cero, no recuperarla de una entrada perdida.
+
 ## Configuraciones delicadas
 
 - **`API_BASE_URL` es obligatorio en runtime**: si se olvida
@@ -298,13 +300,17 @@ búsqueda "upeu".
 ## Campo de precio acepta texto libre
 
 Estado:
-PENDIENTE. Preexistente; **no fue introducido por `HOME-LAYOUT-R1`**.
+**RESUELTO (`FARE-PANEL-R1`, etapa 2, 2026-08-27).** Preexistente;
+no fue introducido por `HOME-LAYOUT-R1`.
 
-El campo permite escribir letras. El botón se deshabilita correctamente
-cuando el contenido no representa un monto válido, por lo que no hay
-riesgo funcional, pero el input debería filtrar a dígitos y separador
-decimal. Se resolverá en el checkpoint de tarifa sugerida, donde ese
-campo se rediseñará por completo.
+El campo de texto libre del panel de precio de Home fue reemplazado
+por un stepper no editable (`[ − S/ X.XX + ]`, rango S/3.00–S/50.00,
+pasos de S/0.50) — ya no hay ningún `TextField` en el que se pueda
+escribir una letra. El campo de monto que sí sigue siendo editable a
+mano (`OfferFareScreen`, "Ofrece tu tarifa", etapa 4) tiene su propio
+filtro de entrada (solo dígitos y un separador decimal,
+`TextInputFormatter`) y clamp de rango al perder el foco — el hallazgo
+original ("el input debería filtrar a dígitos") quedó cubierto ahí.
 
 ## Alineación del ancla del marcador sin validar en zoom máximo
 
@@ -329,9 +335,18 @@ historial de ese archivo.
 ## Estado "cotización vencida" nunca validado visualmente
 
 Estado:
-PENDIENTE DE VERIFICACIÓN VISUAL. Encontrado durante `HOME-DESIGN-R1-PARCIAL`
-(2026-08-26) al intentar confirmar en emulador el color corregido de
-ese texto (`textoSecundarioSobreOscuro`, ver `decisiones.md`).
+**RESUELTO (`FARE-PANEL-R1`, etapa 2, 2026-08-27) — por eliminación del
+texto, no por validación visual del color.** Encontrado durante
+`HOME-DESIGN-R1-PARCIAL` (2026-08-26) al intentar confirmar en
+emulador el color corregido de ese texto (`textoSecundarioSobreOscuro`,
+ver `decisiones.md`). El panel de precio rediseñado en `FARE-PANEL-R1`
+dejó de mostrar el texto de vigencia/vencimiento de la cotización por
+completo (compactación visual, etapa 2) — el mecanismo de fondo
+(`_scheduleQuoteExpiryTimer`, auto-renovación silenciosa sin botón
+manual) sigue funcionando exactamente igual, descrito abajo, solo que
+ya no hay ningún texto en pantalla cuyo color haga falta validar. La
+pregunta original ("¿se ve bien 'Cotización vencida' con su color
+corregido?") queda sin objeto.
 
 Qué se observó:
 `_scheduleQuoteExpiryTimer` (`home_screen.dart`) programa un `Timer`

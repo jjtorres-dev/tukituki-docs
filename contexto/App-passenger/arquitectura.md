@@ -56,15 +56,20 @@ lib/
     auth/       data/ (AuthRepository) domain/ (PublicUser) presentation/ (splash, login, register, otp)
     fare/       data/ (FareRepository) domain/ (FareEstimate)
     health/     health_repository.dart + health_screen.dart (sin subcarpetas)
-    home/       home_screen.dart (pantalla principal de solicitud de viaje; sin data/domain propios, reutiliza fare/places/ride)
+    home/       home_screen.dart, search_destination_screen.dart, offer_fare_screen.dart (sin presentation/ propia, archivos sueltos); domain/ (SearchDestinationResult, OfferFareResult, ShortAddressLabel, SuggestedDestinations) — sin data/ propio, reutiliza fare/places/ride
     passenger/  data/ (PassengerProfileRepository) presentation/ (complete_profile_screen)
     places/     data/ (PlacesRepository) domain/ (PlacePrediction, PlaceDetails)
-    ride/       data/ (RideRepository) domain/ (PassengerRide y modelos asociados) presentation/ (ride_searching_screen, ride_receipt_screen)
+    ride/       data/ (RideRepository, PaymentPreferenceRepository) domain/ (PassengerRide y modelos asociados, PaymentMethod) presentation/ (ride_searching_screen, ride_receipt_screen, PaymentMethodPickerSheet)
 ```
 
 La convención `data/` (repos) + `domain/` (modelos JSON) + `presentation/`
 (widgets) se cumple en `auth`, `fare`, `passenger`, `places`, `ride`.
-`health` y `home` son excepciones — no la siguen (ver `convenciones.md`).
+`health` y `home` son excepciones — no la siguen del todo (ver
+`convenciones.md`): `home` sigue sin `data/` propio, pero desde
+`HOME-FLOW-R1`/`FARE-PANEL-R1` sí tiene su propia carpeta `domain/`
+(tipos de resultado de pantallas y utilidades puras) y varios archivos
+de pantalla sueltos además de `home_screen.dart` — dejó de ser "un solo
+archivo sin subcarpetas".
 
 ## Módulos principales
 
@@ -92,10 +97,24 @@ La convención `data/` (repos) + `domain/` (modelos JSON) + `presentation/`
 - **ride**: ciclo de vida completo del viaje del pasajero — creación,
   polling de estado, ofertas de conductores (negociación), selección
   de oferta, cancelación, código de inicio (PIN), recibo, pago y
-  calificación.
+  calificación. **Desde `FARE-PANEL-R1` (2026-08-31)** también aloja
+  la preferencia de método de pago del pasajero (`PaymentPreferenceRepository`,
+  `flutter_secure_storage`, dato por dispositivo no por cuenta) y su
+  selector compartido (`PaymentMethodPickerSheet`,
+  `lib/features/ride/presentation/payment_method_picker_sheet.dart`,
+  extraído de `home_screen.dart` porque lo reutilizan tanto Home como
+  `OfferFareScreen`).
 - **home**: pantalla mapa + selección de destino + negociación de
   tarifa antes de crear el ride (`lib/features/home/home_screen.dart`,
-  2585 líneas — la pantalla más grande del repo).
+  la pantalla más grande del repo). **Desde `FARE-PANEL-R1` (2026-08-31)**
+  ya no es un único archivo: `offer_fare_screen.dart` es la pantalla de
+  confirmación de tarifa ("Ofrece tu tarifa"), que devuelve su
+  resultado por `Navigator.pop` en vez de crear el ride directamente
+  (mismo patrón que ya usaba `search_destination_screen.dart` desde
+  `HOME-FLOW-R1`); `domain/short_address_label.dart` es la utilidad
+  pura de acortado de direcciones (mismo patrón que
+  `ride/domain/fare_amount.dart`) reutilizada por las tarjetas
+  origen/destino de ambas pantallas.
 
 ## Entidades principales
 
