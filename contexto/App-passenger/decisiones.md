@@ -7,7 +7,7 @@ Branch analizada:
 main
 
 Última actualización:
-2026-08-27
+2026-09-02
 
 Fuente de verdad:
 Este documento es contexto auxiliar. Si contradice al código actual,
@@ -1434,3 +1434,100 @@ Evidencia:
 `lib/features/home/home_screen.dart` (`_openPaymentMethodPicker`),
 `lib/features/home/offer_fare_screen.dart` (`_openPaymentMethodPicker`),
 `test/features/ride/presentation/payment_method_picker_sheet_test.dart`.
+
+---
+
+## `PASSENGER-PUSH-R1` — el registro de push para `/home` vive en `HomeScreen`, no en el splash: carrera de permisos ubicación/notificaciones (2026-09-01)
+
+Estado:
+**FINAL-CLOSED-ON-MAIN**, ver `historial-checkpoints.md`, `PASSENGER-PUSH-R1` (commit `eae0d1a` de la rama `test/passenger-push-r1`; `main`@`e17d760`).
+
+Qué se decidió:
+El registro de dispositivo para push (`PushRegistrationCoordinator.syncDeviceRegistration()`, que puede disparar el diálogo nativo de permiso de notificaciones) se dispara desde **`HomeScreen`**, en el `finally` de `_loadCurrentLocation()`, y **no** desde `SplashScreen` — pero solo para el destino `/home`. Para los otros dos destinos de éxito del resolver de sesión (`/complete-profile`, `/ride/:rideId`), que no piden ningún permiso del sistema, el registro se sigue disparando desde el splash sin cambios. Un guard de instancia (`_pushRegistrationRequested`, una sola vez por vida del `State`) evita re-disparos por remontajes de Home o por el botón de recentrar (que también corre ese `finally`).
+
+Por qué:
+En una instalación nueva, el splash disparaba el permiso de notificaciones y, casi enseguida, `HomeScreen` disparaba el permiso de ubicación al entrar. Android solo permite **un** diálogo de permiso nativo a la vez: el segundo se perdía silenciosamente y la app quedaba cargando indefinidamente (forzar cierre y reabrir lo "arreglaba", porque el segundo permiso ya no competía). Es un problema conocido de Android/Flutter, no un bug de lógica de la app. Mover el registro de push de `/home` al `finally` de `_loadCurrentLocation()` lo secuencia **después** de que el permiso de ubicación se resolvió (concedido, denegado, servicio apagado o error — el `finally` corre en todos esos caminos), así que los dos diálogos nunca compiten. Los otros dos destinos no tienen este problema porque no piden permisos de sistema, por eso no se les cambió nada (mantener el disparo en el splash es lo más simple para ellos).
+
+Alternativas descartadas:
+- Encolar los dos permisos con un orquestador global de diálogos de permiso — descartada por sobredimensionada: hay exactamente dos permisos en juego y uno solo de ellos (ubicación) tiene un punto natural de "ya resolví" del que colgar el otro.
+- Disparar el registro de push de `/home` también desde el splash, aceptando el riesgo — descartada: es justamente el bug que se estaba corrigiendo.
+- Pedir el permiso de notificaciones sin diálogo (silencioso) — no existe en Android 13+: `POST_NOTIFICATIONS` es un permiso runtime con diálogo obligatorio.
+
+Evidencia:
+`lib/features/home/home_screen.dart` (`_loadCurrentLocation()` `finally`, `_pushRegistrationRequested`), `lib/features/auth/presentation/splash_screen.dart` (disparo para `/complete-profile` y `/ride/:rideId`), `lib/features/notifications/data/push_registration_coordinator.dart`. Tests: `test/features/home/home_screen_test.dart` (grupo "PASSENGER-PUSH-R1 (fix): registro de push tras el permiso de ubicación"). Commit `eae0d1a`, rama `test/passenger-push-r1`.
+
+---
+
+## `PASSENGER-PUSH-R1` — aviso con sonido en foreground solo para dos eventos; en segundo plano, todos: decisión de producto (2026-09-01)
+
+Estado:
+**FINAL-CLOSED-ON-MAIN**, ver `historial-checkpoints.md`, `PASSENGER-PUSH-R1` (commit `11bf77e`).
+
+Qué se decidió (decisión de producto de JuanJo, confirmada explícitamente):
+Con la app en **primer plano**, `PushMessageHandler` solo materializa un aviso local (sonido + heads-up, canal `ride_updates`) para **`DRIVER_ARRIVED`** y **`RIDE_COMPLETED`** — de los ~8 tipos de evento que el Backend envía al pasajero. Para `RIDE_COMPLETED` se ignora a propósito la notificación hermana `RATING_REQUEST` (un solo aviso por fin de viaje, no dos). Todo el resto (`DRIVER_ARRIVING`, `RIDE_ASSIGNED`, `RIDE_STARTED`, `RIDE_CANCELLED`, `RIDE_EXPIRED`, pago confirmado, etc.) se recibe y se descarta con `debugPrint`. IDs de notificación **separados por evento** (1 = conductor llegó, 2 = viaje completado), a diferencia del ID fijo del conductor, para que un `DRIVER_ARRIVED` no borre un `RIDE_COMPLETED` si llegaran cerca en el tiempo.
+
+Con la app en **segundo plano** o cerrada, Android muestra automáticamente **todos** los eventos que el Backend ya envía con bloque `notification` completo (6 en la práctica) — y eso **es intencional, no un bug ni una limitación pendiente**.
+
+Por qué la asimetría foreground/background:
+En primer plano el pasajero ya está mirando la pantalla del viaje, que se refresca por polling cada 3s y muestra el estado en vivo — sonar y mostrar un heads-up para el mismo cambio de estado que ya está visible en pantalla sería ruido redundante. Solo los dos eventos más "accionables" (el conductor llegó → sal a la calle; el viaje terminó → revisá la tarifa) justifican interrumpir. En segundo plano la app no tiene ninguna visibilidad, así que tiene sentido ser más generoso y avisar de todo — y como el Backend ya arma esas notificaciones y Android ya las dibuja solo, no cuesta nada.
+
+Riesgo asumido y cómo se revisa:
+Alguien podría cuestionar después que "faltan avisos" en primer plano (p. ej. no suena cuando el conductor va en camino). Es deliberado. Se revisará con datos reales después de la prueba con usuarios: si el patrón foreground-mínimo se siente pobre en uso real, se amplía la lista de eventos; la infraestructura (`RideUpdateKind`, el filtro) ya soporta agregar tipos sin reescribir nada.
+
+Alternativas descartadas:
+- Sonar en primer plano para los mismos 6 eventos que Android muestra en segundo plano — descartada: duplica lo que el pasajero ya ve en pantalla.
+- No mostrar ningún aviso en primer plano (comportamiento por defecto de FCM) — descartada: `DRIVER_ARRIVED` y `RIDE_COMPLETED` sí ameritan interrumpir aunque la app esté abierta en otra pantalla.
+- Un único ID de notificación como en el conductor — descartada: en el pasajero dos eventos distintos pueden estar vigentes a la vez (llegó + completó), no deberían pisarse.
+
+Evidencia:
+`lib/features/notifications/data/push_message_handler.dart` (`resolveRideUpdateKind()`, `PushMessageHandler._handleMessage()`), `lib/features/notifications/data/local_notifications_service.dart` (`RideUpdateKind`, `notificationId` por evento, canal `ride_updates`), `lib/main.dart` (creación explícita del canal). Tests: `test/features/notifications/data/push_message_handler_test.dart` (~24 casos: solo los dos eventos disparan `show()`, el resto no; IDs distintos; `RATING_REQUEST` ignorado junto a `RIDE_COMPLETED`). Commit `11bf77e`.
+
+---
+
+## `PASSENGER-PUSH-R1` — cold start al recibo: pila sintética Home→recibo, y por qué `context.go()` + `context.push()` no compone en go_router 17.4 (2026-09-02)
+
+Estado:
+**FINAL-CLOSED-ON-MAIN**, ver `historial-checkpoints.md`, `PASSENGER-PUSH-R1` (Etapa 3, dentro del commit `e17d760`; `main`@`e17d760253dbe47bf3acfa631268fec610867b19`).
+
+Qué se decidió:
+Cuando el pasajero toca la notificación de "viaje completado" (`RIDE_COMPLETED`) con la app **completamente terminada** (cold start), la navegación se desvía directamente al recibo de ese viaje — pero armando una pila sintética `[/home, recibo]`, no navegando "pelado" al recibo.
+
+- **`getInitialMessage()` se lee una sola vez, en `main.dart`, antes de `runApp`** (best-effort + `timeout` de 2s), y se inyecta como valor plano vía `initialPushMessageProvider`. **Nunca** se lee dentro de `SplashScreen._checkSession`: ese método se re-ejecuta con el botón "Reintentar", y `getInitialMessage()` se "consume" — leerlo ahí arriesga perderlo o procesarlo dos veces.
+- **`coldStartReceiptRouteFor()`** es una función pura (sin `BuildContext`, sin Firebase) que decide si desviar: devuelve la ruta del recibo **solo si** el mensaje inicial es `RIDE_COMPLETED`, trae un `rideId` usable, y **no hay un viaje activo más nuevo** (precedencia: el viaje activo siempre gana — se navega ahí, no al recibo viejo). `DRIVER_ARRIVED`, `RATING_REQUEST` y cualquier otro evento → `null` → cae al resolver de sesión normal.
+- En `SplashScreen._checkSession`, cuando corresponde el desvío y la sesión está lista (perfil presente), se compone la pila con **`context.pushReplacement('/home')` seguido de `context.push(recibo)`**, en el mismo bloque síncrono, sin `await` en el medio. El botón de volver del recibo cae en Home en vez de cerrar la app.
+- **`RideReceiptScreen` no se tocó.** No tiene salida propia hasta que el pasajero califica; sembrar Home debajo es lo que le da una salida sin modificar la pantalla.
+
+Nota técnica — por qué `pushReplacement` + `push` y no `go` + `push`:
+Se probó primero `context.go('/home')` + `context.push(recibo)` en el mismo bloque síncrono. **No funciona en go_router 17.4**: `go` se resuelve de forma asíncrona por dentro (agenda el cambio de configuración del router para un microtask posterior) y, al resolverse, descarta el `push` imperativo que se había hecho en el mismo bloque — el resultado era Home sola, sin el recibo encima. `pushReplacement('/home')` + `push(recibo)` son ambas operaciones **imperativas y síncronas** sobre el `RouterDelegate`: componen la pila `[/home, recibo]` en el mismo frame, sin flash visible de Home. Si una versión futura de go_router cambia la semántica de `go`, revisar este bloque.
+
+Alternativas descartadas:
+- `context.go(rutaRecibo)` a secas — descartada: deja al pasajero sin nada debajo del recibo, el botón de volver cierra la app.
+- Leer `getInitialMessage()` en el splash — descartada: se consume, y el splash se re-ejecuta con "Reintentar".
+- `go('/home')` + `push(recibo)` — descartada: no compone en go_router 17.4 (ver nota técnica).
+- Modificar `RideReceiptScreen` para que tenga su propio botón "Volver al inicio" — descartada para este checkpoint: la pila sintética resuelve el caso sin tocar una pantalla compartida con el flujo en vivo.
+
+Evidencia:
+`lib/main.dart` (`getInitialMessage()`, `initialPushMessageProvider.overrideWithValue`), `lib/features/notifications/data/push_message_handler.dart` (`coldStartReceiptRouteFor()`, `initialPushMessageProvider`), `lib/features/auth/presentation/splash_screen.dart` (`_checkSession`, `pushReplacement('/home')` + `push`). Tests: `test/features/notifications/data/push_cold_start_test.dart` (nuevo — `coldStartReceiptRouteFor`: precedencia del viaje activo, `rideId` ausente/en blanco/con espacios, `DRIVER_ARRIVED`, `RATING_REQUEST`), `test/features/auth/presentation/splash_screen_test.dart` (7 casos de cold start: siembra Home + apila recibo, back vuelve a Home, precedencia del viaje activo, gate de perfil incompleto, sin sesión, `DRIVER_ARRIVED`, `RATING_REQUEST`, arranque normal). Commit `e17d760`.
+
+---
+
+## `PASSENGER-PUSH-R1` (fix) — clave `route`→`screen` en el payload de notificaciones + `errorBuilder` de red de seguridad (2026-09-02)
+
+Estado:
+**FINAL-CLOSED-ON-MAIN**, ver `historial-checkpoints.md`, entrada propia del fix cross-repo (dentro del commit `e17d760` junto con la Etapa 3 — la Etapa 3 nunca llegó a un estado commiteable con la clave rota, por eso van juntas).
+
+Qué se decidió:
+
+1. **Leer `data['screen']` en vez de `data['route']`.** La clave `route` dentro del objeto `data` de una notificación FCM colisiona con `EXTRA_INITIAL_ROUTE`, constante reservada del embedding de Flutter en Android: con la app terminada, Android copia cada entrada de `data` como extra del intent de arranque y Flutter usa el extra llamado literalmente `"route"` como `initialRoute`. Como los valores (`'ride-receipt'`, `'ride-rating'`, etc.) no son rutas declaradas, la app arrancaba con `GoException: no routes for location` al tocar cualquier notificación con el proceso terminado. El Backend renombró la clave a `screen` en todas sus notificaciones (`main`@`48d797bb`); esta app se alinea: `resolveRideUpdateKind()` y el `debugPrint` de `_handleMessage()` leen `data['screen']`. `coldStartReceiptRouteFor()` se corrige solo, porque delega en `resolveRideUpdateKind()` y no lee la clave por su cuenta. Corte limpio, sin compatibilidad con el nombre viejo.
+
+2. **`errorBuilder` de red de seguridad en el `GoRouter` → `RouteNotFoundScreen`.** Ante cualquier ruta que `go_router` no resuelva (ahora o en el futuro, por cualquier causa), el pasajero ve una pantalla con un botón real que navega a `/splash` — el resolver de sesión, que cubre los tres destinos posibles (Home, Login, Completar perfil). Reemplaza al `ErrorScreen` por defecto de `go_router`, cuyo botón "Home" apunta a `/`, ruta inexistente en esta app, que dejaba al usuario atrapado. Mismo criterio y misma estructura que `RouteNotFoundScreen` de la app del conductor, adaptada a los tokens `PassengerColors`/`PassengerSpacing`/`PassengerTypography`.
+
+Por qué las dos cosas juntas:
+El renombre elimina la causa conocida; el `errorBuilder` es el cinturón por si aparece otra causa. Una ruta inválida que deje al usuario sin salida es un dead-end lo bastante grave como para tener una malla de contención permanente, no solo la corrección puntual.
+
+Alternativas descartadas:
+- Mantener `route` y filtrar el extra en el lado nativo — descartada: frágil, específico de plataforma, no ayuda a otras claves de `data`; renombrar en el origen es la solución correcta.
+- Solo renombrar, sin `errorBuilder` — descartada: deja la app sin malla de contención ante rutas inválidas futuras de otra causa.
+
+Evidencia:
+`lib/features/notifications/data/push_message_handler.dart` (`resolveRideUpdateKind()`, `_handleMessage()`), `lib/features/notifications/data/local_notifications_service.dart` (comentario del enum), `lib/core/router/app_router.dart` (`errorBuilder`), `lib/core/router/route_not_found_screen.dart` (nuevo). Tests: `push_message_handler_test.dart` y `push_cold_start_test.dart` (clave `route`→`screen` en todos los casos), `test/core/router/route_not_found_screen_test.dart` (nuevo — ruta inválida muestra el fallback sin crash, el botón navega a `/splash`). Commit `e17d760`, `main`@`e17d760253dbe47bf3acfa631268fec610867b19`. Backend coordinado: `main`@`48d797bb556a63664ee2a79adb10f50839fb1688`.

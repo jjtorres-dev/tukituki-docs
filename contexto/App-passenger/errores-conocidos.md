@@ -10,7 +10,7 @@ Commit analizado:
 5c4f0f9136f2e49a4b746755963e01fa29aa3d49
 
 Última actualización:
-2026-08-27 (agregados pendientes conocidos de `HOME-FLOW-R1`)
+2026-09-02 (agregado el patrón "colisión de nombres reservados Android/Flutter con claves de `data` de FCM" tras `PASSENGER-PUSH-R1`)
 
 Fuente de verdad:
 Este documento es contexto auxiliar. Si contradice al código actual,
@@ -378,3 +378,22 @@ Evidencia:
 `lib/features/home/home_screen.dart` (`_scheduleQuoteExpiryTimer`,
 `_isQuoteExpired`); `docs/contexto/App-passenger/decisiones.md`,
 entrada `HOME-DESIGN-R1-PARCIAL`.
+
+## Colisión de nombres reservados de Android/Flutter con claves de `data` de FCM (patrón a vigilar)
+
+Estado:
+RESUELTO para el caso concreto (clave `route`, fix dentro de `PASSENGER-PUSH-R1` Etapa 3, `main`@`e17d760`) — registrado aquí como **patrón general** a tener en cuenta en cualquier integración nativa futura, no solo como algo ya cerrado.
+
+Qué pasó:
+El código de notificaciones (`resolveRideUpdateKind()` en `push_message_handler.dart`) leía `data['route']` del `RemoteMessage` para reconocer `RIDE_COMPLETED` (`data.route == 'ride-receipt'`), coherente con lo que mandaba el Backend entonces. Con la app **completamente terminada**, tocar cualquier notificación push hacía que Android copiara cada entrada del objeto `data` como extra del intent de arranque de la `MainActivity`; el embedding de Flutter en Android lee el extra llamado literalmente `"route"` (`EXTRA_INITIAL_ROUTE`, `FlutterActivityLaunchConfigs`) y lo usa como `initialRoute`, antes de cualquier lógica de navegación. Como los valores (`'ride-receipt'`, `'ride-rating'`, etc.) no son rutas declaradas, `go_router` arrancaba con `GoException: no routes for location`, y el `ErrorScreen` por defecto de go_router (botón "Home" → `/`, ruta inexistente en esta app) dejaba al pasajero atrapado sin salida hasta forzar el cierre. Se destapó al probar la Etapa 3 (cold start al recibo) con force-stop + un mensaje real de FCM.
+
+Cómo se resolvió:
+Backend renombró la clave `route` → `screen` en las 10 ocurrencias donde arma el `data` de una notificación, para todos los tipos de evento (`main`@`48d797bb`); la app lee `data['screen']` (`resolveRideUpdateKind()` y el `debugPrint` de `_handleMessage()`; `coldStartReceiptRouteFor()` se corrige solo al delegar en `resolveRideUpdateKind()`). Además se agregó un `errorBuilder` en el `GoRouter` (`RouteNotFoundScreen`, botón → `/splash`, el resolver de sesión) como red de seguridad ante cualquier ruta inválida futura de otra causa. Ver `decisiones.md`, entrada `PASSENGER-PUSH-R1` (fix).
+
+Patrón a recordar para el futuro (aplica a cualquier evento push nuevo, y a cualquier integración nativa que reciba datos de un intent):
+- **Nunca** poner una clave llamada `route` en el objeto `data` de una notificación FCM para Android. Sospechar también de otros nombres del namespace `io.flutter.*` / `FlutterActivityLaunchConfigs` (p. ej. `initial_route`, `background_isolate_run`).
+- Claves ya en uso y confirmadas seguras: `screen`, `eventType`, `rideId`, `offerId`, `status`.
+- La única forma fiable de validar el cold start es force-stop del proceso + notificación **real** desde la consola de Firebase Cloud Messaging. Un `adb shell am start ... --es screen ...` no reproduce el pipeline real (no dispara `getInitialMessage()`), aunque sí sirve para confirmar que la app arranca sin crashear con esos extras y aterriza en Home.
+
+Evidencia:
+`lib/features/notifications/data/push_message_handler.dart`, `lib/features/notifications/data/local_notifications_service.dart`, `lib/core/router/app_router.dart`, `lib/core/router/route_not_found_screen.dart`. Commit `e17d760`, `main`@`e17d760253dbe47bf3acfa631268fec610867b19`. Backend: `main`@`48d797bb556a63664ee2a79adb10f50839fb1688`.

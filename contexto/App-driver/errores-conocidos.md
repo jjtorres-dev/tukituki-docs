@@ -10,7 +10,7 @@ Commit analizado:
 9c2a7f75da3abe375dd16a3336507145aece7455
 
 Última actualización:
-2026-08-18 (refrescado tras `CROSS-APP-R4.3J`, fast-forward de `test/r4-ride-identities` a `main`)
+2026-09-02 (agregado el patrón "colisión de nombres reservados Android/Flutter con claves de `data` de FCM" tras `DRIVER-PUSH-R1`)
 
 Fuente de verdad:
 Este documento es contexto auxiliar. Si contradice al código actual,
@@ -64,3 +64,22 @@ Registrados aquí solo como referencia histórica — ninguno sigue activo en el
 - **Stale "Revisar y enviar" tras editar una sección** (`R3.7.2`): al editar Sobre ti/Tu mototaxi/Tus documentos desde el resumen y volver, la pantalla seguía mostrando el valor anterior aunque Backend ya tenía el dato correcto. Causa: `DriverOnboardingSubmitReviewScreen` solo aplicaba el estado inicial dentro de `initState()`; como las pantallas de edición vuelven con `context.go(...)` a la misma ruta (no `pop()`), `go_router` podía reutilizar el `State` existente sin volver a ejecutar `initState()`. Fix: `didUpdateWidget()` agregado para consumir un `initialState` fresco. **Resuelto y reprobado físicamente.**
 - **CTA "Revisar y reenviar" no se habilitaba tras la última corrección** (`R3.8.2`): tras corregir la última observación pendiente en "Correcciones requeridas" y volver, las tarjetas mostraban el estado fresco correctamente pero el botón seguía deshabilitado hasta reiniciar la app. Causa: el flag local `_busy` (anti doble-tap durante la navegación de corrección) solo se reseteaba en la continuación de un `await context.push(...)` que no llegaba a ejecutarse a tiempo cuando el destino volvía vía `context.go()` en vez de un `pop()` imperativo. Fix: `_assignFromState()` (fuente única de `initState`/`didUpdateWidget`/`_loadFresh`) ahora también resetea `_busy`. **Resuelto y reprobado físicamente.**
 - **Marcador de contexto de reenvío como booleano global** (`R3.8B`, encontrado antes de la primera prueba física): el marcador local de "sigo en ciclo de reenvío" era una única key compartida por toda la instalación (no por cuenta) y el logout la borraba incondicionalmente — riesgo de compartir contexto entre dos conductores en el mismo dispositivo, y de perder el contexto si el conductor cerraba sesión antes de reenviar. Fix: marcador scoped por `AuthenticatedUser.id`, y `clearSession()` ya no lo toca. **Resuelto antes de cualquier build de prueba física, sin impacto en usuarios reales.**
+
+## Colisión de nombres reservados de Android/Flutter con claves de `data` de FCM (patrón a vigilar)
+
+Estado:
+RESUELTO para el caso concreto (clave `route`, `DRIVER-PUSH-R1` fix, `main`@`2fdfd60`) — registrado aquí como **patrón general** a tener en cuenta en cualquier integración nativa futura, no solo como algo ya cerrado.
+
+Qué pasó:
+`DRIVER-PUSH-R1` (Etapa 2) leía `data['route']` del `RemoteMessage` para filtrar `RIDE_OFFER_CREATED`, coherente con lo que mandaba el Backend entonces. Con la app **completamente terminada**, tocar cualquier notificación push hacía que Android copiara cada entrada del objeto `data` como extra del intent de arranque de la `MainActivity`; el embedding de Flutter en Android lee el extra llamado literalmente `"route"` (`EXTRA_INITIAL_ROUTE`, `FlutterActivityLaunchConfigs`) y lo usa como `initialRoute`, antes de cualquier lógica de navegación de la app. Como `'ride-offer'` no es una ruta declarada, `go_router` arrancaba con `GoException: no routes for location`, y el `ErrorScreen` por defecto de go_router (botón "Home" → `/`, ruta inexistente) dejaba al usuario atrapado. Nunca se había detectado porque no se había probado "proceso muerto + tap de notificación real" de forma rigurosa hasta la Etapa 3 de `PASSENGER-PUSH-R1`.
+
+Cómo se resolvió:
+Backend renombró la clave `route` → `screen` en las 10 ocurrencias donde arma el `data` de una notificación, para todos los tipos de evento (`main`@`48d797bb`); la app lee `data['screen']`. Además se agregó un `errorBuilder` en el `GoRouter` (`RouteNotFoundScreen`, botón → `/splash`) como red de seguridad ante cualquier ruta inválida futura de otra causa. Ver `decisiones.md`, entrada `DRIVER-PUSH-R1` (fix).
+
+Patrón a recordar para el futuro (aplica a cualquier evento push nuevo, y a cualquier integración nativa que reciba datos de un intent):
+- **Nunca** poner una clave llamada `route` en el objeto `data` de una notificación FCM para Android. Sospechar también de otros nombres del namespace `io.flutter.*` / `FlutterActivityLaunchConfigs` (p. ej. `initial_route`, `background_isolate_run`).
+- Claves ya en uso y confirmadas seguras: `screen`, `eventType`, `rideId`, `offerId`, `status`.
+- La única forma fiable de validar el cold start es force-stop del proceso + notificación **real** desde la consola de Firebase Cloud Messaging. Un `adb shell am start ... --es route ...` no reproduce el bug (no pasa por el pipeline interno de Firebase, no dispara `getInitialMessage()`), aunque sí sirve para confirmar que la app al menos arranca sin crashear con esos extras.
+
+Evidencia:
+`lib/features/notifications/data/push_message_handler.dart`, `lib/core/router/app_router.dart`, `lib/core/router/route_not_found_screen.dart`. Commits `c11b48f` (`DRIVER-PUSH-R1`) y `2fdfd60` (fix). Backend: `main`@`48d797bb556a63664ee2a79adb10f50839fb1688`.

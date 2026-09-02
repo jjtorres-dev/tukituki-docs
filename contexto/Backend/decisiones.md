@@ -10,7 +10,7 @@ Commit analizado:
 1e029a3ea5aded92cac21dcd4f5996e7bc167bff
 
 Última actualización:
-2026-08-27
+2026-09-02
 
 Fuente de verdad:
 Este documento es contexto auxiliar. Si contradice al código actual,
@@ -614,3 +614,55 @@ La `FareRule` activa en STAGING tiene `nightMultiplier: 2.00` configurado, pero 
 
 Evidencia:
 Ver `errores-conocidos.md`.
+
+---
+
+## `FCM-ENABLE-R1` — Firebase Cloud Messaging activado en STAGING (2026-09-01)
+
+Estado:
+ACTIVA — cambio de configuración de Railway STAGING, sin commit ni migración. Producción, cuando exista, necesitará su propio service account y su propio `FCM_ENABLED`.
+
+Qué se decidió:
+Se puso `FCM_ENABLED=true` en el servicio `tukituki-backend` del ambiente Railway **STAGING**, con `FIREBASE_SERVICE_ACCOUNT_BASE64` (JSON del service account de Firebase, base64) y `FIREBASE_PROJECT_ID` configurados como variables/secretos de Railway. Ningún cambio de código: todo el sistema de push del Backend ya estaba construido y apagado por flag desde antes — `FcmPushService` (`src/modules/notifications/fcm-push.service.ts`, HTTP v1), `NotificationEventHandler`, el registro de dispositivos (`UserDevice`, `POST /me/devices`, upsert por `pushToken` con índice único parcial sobre filas activas) y el consumo desde el Outbox worker.
+
+Por qué:
+Mismo patrón que Izipay (`IZIPAY_ENABLED`) y Storage (`STORAGE_ENABLED`): una integración externa completa vive en el código, desactivada por un flag booleano validado por Joi al arranque (activar el flag sin las credenciales correspondientes **falla el boot**, no en tiempo de uso — ver `errores-conocidos.md`). Activar FCM en STAGING era el prerrequisito para que `DRIVER-PUSH-R1` y `PASSENGER-PUSH-R1` (las dos apps registrando dispositivos y consumiendo push) tuvieran algo real contra qué probar.
+
+Verificación:
+Se confirmó que activar el flag no introdujo ninguna regresión — la suite del Backend no depende del transporte FCM real (los tests mockean `FcmPushService`). La validación funcional real ocurrió del lado de las apps: registro de dispositivo confirmado en la base de datos de STAGING, y entrega real de notificaciones probada con mensajes desde la consola de Firebase Cloud Messaging (ver `historial-checkpoints.md`, `DRIVER-PUSH-R1` / `PASSENGER-PUSH-R1`).
+
+Alternativas descartadas:
+Dejar FCM apagado y seguir probando las apps con `am start`/intents simulados por `adb` — descartada: un intent simulado no pasa por el pipeline interno de Firebase y no dispara `getInitialMessage()` correctamente, así que no permite validar el cold start real (que fue justamente donde apareció el bug `route`/`EXTRA_INITIAL_ROUTE`).
+
+Evidencia:
+`src/modules/notifications/fcm-push.service.ts`, `src/config/env.validation.ts` (`FCM_ENABLED`, `FIREBASE_SERVICE_ACCOUNT_BASE64` condicionalmente requerida), `Backend/arquitectura.md` (línea de FCM en integraciones externas). Ambiente Railway STAGING (`tukituki-backend-staging.up.railway.app`). Sin commit — cambio de configuración confirmado por JuanJo el 2026-09-01.
+
+---
+
+## Fix `route`→`screen` en el objeto `data` de todas las notificaciones push: colisión con `EXTRA_INITIAL_ROUTE` de Flutter/Android (2026-09-02)
+
+Estado:
+**FINAL-CLOSED-ON-MAIN**, `main`@`48d797bb556a63664ee2a79adb10f50839fb1688`. Parte de un fix coordinado en los tres repos — ver `historial-checkpoints.md`, entrada propia del fix cross-repo. Corte limpio, sin compatibilidad con el nombre viejo (STAGING sin usuarios reales todavía).
+
+Qué se decidió:
+La clave `route` dentro del objeto `data` de **todas** las notificaciones push se renombró a `screen`, en las **10 ocurrencias** de `src/modules/notifications/notification-event.handler.ts` donde se arma ese objeto, para **todos** los tipos de evento del sistema — no solo los que las apps consumen hoy:
+
+`ride-offer` (nueva solicitud al conductor), `ride-detail` (cambios de estado del viaje), `ride-receipt` (viaje completado), `ride-rating` (pedido de calificación), `driver-settlement` (liquidación al conductor), `safety-incident` (incidente de seguridad), `emergency-contact-alert` (alerta a contacto de emergencia), `ride-share-links` (enlaces de viaje compartido).
+
+Solo cambió el **nombre de la clave**; los valores (`'ride-offer'`, `'ride-receipt'`, etc.) no se tocaron.
+
+Por qué — la colisión, para quien agregue un evento push en el futuro:
+`route` es el nombre de un extra reservado por el **embedding de Flutter en Android** (`EXTRA_INITIAL_ROUTE`, `io.flutter.embedding.android.FlutterActivityLaunchConfigs`). Cuando la app está **completamente terminada** y el usuario toca una notificación, Android arranca la `MainActivity` copiando **cada entrada del `data` de la notificación como un extra del intent**. El embedding de Flutter lee el extra llamado literalmente `"route"` y lo pasa como `initialRoute` al motor de Dart — **antes** de que corra cualquier lógica de navegación de la app. `go_router` recibe entonces `'ride-offer'` (o `'ride-detail'`, etc.) como ubicación inicial, no encuentra ninguna ruta declarada con ese path y lanza `GoException: no routes for location`. El resultado para el usuario: la app "no abre" al tocar **cualquier** notificación con el proceso muerto — y, por un problema aparte del `ErrorScreen` por defecto de `go_router` (su botón apunta a `/`, ruta inexistente en ambas apps), quedaba atrapado sin salida.
+
+**Regla permanente: NUNCA usar una clave llamada `route` en el objeto `data` de una notificación FCM destinada a Android.** También conviene evitar cualquier otro nombre que el embedding de Flutter trate como especial (p. ej. `initial_route`, `background_isolate_run` y similares del namespace `io.flutter.*`). Claves ya en uso y **confirmadas seguras**: `screen`, `eventType`, `rideId`, `offerId`, `status`. Ante la duda con una clave nueva, probar el cold start real (force-stop + notificación real desde la consola de Firebase, no un `adb am start` simulado).
+
+Por qué corte limpio (sin doble clave `route` + `screen` durante una transición):
+STAGING no tiene usuarios reales y las dos apps se actualizan en el mismo tramo de trabajo (`tukituki-driver-app` `main`@`2fdfd60`, `tukituki-passenger-app` `main`@`e17d760`). Mandar las dos claves "por las dudas" habría dejado `route` en el payload — es decir, no habría arreglado nada, porque el embedding de Flutter la seguiría leyendo.
+
+Alternativas descartadas:
+- Mandar `route` y `screen` a la vez durante una ventana de compatibilidad — descartada: mientras `route` siga en el `data`, el bug persiste (ver arriba).
+- Renombrar solo en los eventos que las apps consumen hoy (`ride-offer`, `ride-detail`, `ride-receipt`, `ride-rating`) — descartada: el bug lo dispara **cualquier** notificación con el proceso muerto, incluidas las de seguridad y liquidación; dejar `route` en esas habría dejado el dead-end abierto para esos caminos.
+- Resolver el problema del lado app interceptando el extra en Android nativo — descartada: es un fix por app, frágil y específico de plataforma; renombrar en el origen lo arregla para las dos apps y para cualquier cliente futuro de una sola vez.
+
+Evidencia:
+`src/modules/notifications/notification-event.handler.ts` (10 ocurrencias de la clave del objeto `data`). Commit `48d797bb`, `main`@`48d797bb556a63664ee2a79adb10f50839fb1688`. Coordinado con `tukituki-driver-app` (`main`@`2fdfd60717e9de996cf95f7f8df9a1104e129309`, lee `data['screen']` + `errorBuilder`) y `tukituki-passenger-app` (`main`@`e17d760253dbe47bf3acfa631268fec610867b19`, ídem).

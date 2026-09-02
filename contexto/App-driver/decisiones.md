@@ -7,7 +7,7 @@ Branch analizada:
 main
 
 Última actualización:
-2026-08-18
+2026-09-02
 
 Fuente de verdad:
 Este documento es contexto auxiliar. Si contradice al código actual,
@@ -648,3 +648,54 @@ Explícitamente NO tocado:
 
 Evidencia:
 `lib/features/driver/presentation/driver_ride_completion_view.dart` (`onGoHome`, `_GoHomeButton`, ramas de acción reestructuradas), `lib/features/driver/presentation/driver_active_ride_screen.dart` (`_buildCompletionScreen`), `lib/features/driver/presentation/driver_completed_payment_screen.dart` (`build`). Tests: `test/features/driver/presentation/driver_active_ride_screen_test.dart` (test `J` renombrado y ampliado, más `J2`/`J3`/`J4`/`K`), `test/features/driver/presentation/driver_completed_payment_screen_test.dart` (dos casos nuevos para el restore no-efectivo). Commit `7581a1a`, `main`@`7581a1af562f090038b9afdd40158adcc8d02520`.
+
+---
+
+## `DRIVER-PUSH-R1` — Firebase Cloud Messaging: sin des-registro en logout, y el tap de la notificación no necesitó pantalla nueva (2026-09-01)
+
+Estado:
+**FINAL-CLOSED-ON-MAIN.** Integrado a `main`@`c11b48f4337914969cd4440c20b5c8382e05f6b9` mediante fast-forward puro (rama `test/driver-push-r1` desde `main`@`7581a1a`, un solo commit), tras verificación en **físico** (Samsung A35 5G) de JuanJo en foreground, pantalla bloqueada y app cerrada; registro de dispositivo confirmado en la base de datos de STAGING. `flutter analyze` limpio, 873/873 tests. `test/driver-push-r1` eliminada local y remotamente tras confirmar contención total. Depende de `FCM-ENABLE-R1` (FCM activado en Railway STAGING el mismo día — ver `Backend/decisiones.md`).
+
+Qué se decidió:
+
+1. **No hay des-registro de dispositivo en logout — y es seguro.** Confirmado por lectura directa del Backend: el upsert de `POST /me/devices` está respaldado por un índice único parcial sobre `pushToken` en las filas activas (`WHERE revoked_at IS NULL`) y revoca cualquier fila activa preexistente con el mismo `pushToken` **sin filtrar por `userId`**. Consecuencia: si el mismo dispositivo físico inicia sesión con otra cuenta, el primer `POST /me/devices` de la cuenta nueva revoca la fila del dispositivo viejo y crea la suya — nunca quedan dos filas activas apuntando al mismo token, y una cuenta no recibe push destinado a otra. Por eso `clearSession()` **no** llama a ningún endpoint de des-registro: sería un request de más, best-effort, que puede fallar en silencio, para resolver un problema que el upsert del Backend ya resuelve del lado correcto.
+
+2. **El tap de la notificación (Etapa 3) no necesitó código.** El conductor no tiene una pantalla de detalle de una oferta individual — la lista de propuestas vive en Home y se refresca por polling de 3s. El tap de la notificación de `RIDE_OFFER_CREATED` solo tiene que traer la app al frente, que es el comportamiento por defecto de Android al tocar una notificación cuyo content-intent apunta a la `MainActivity`. Un handler de `onMessageOpenedApp` para navegar a algún lado habría sido código sin destino. Se dejó explícitamente fuera de alcance; recién tendrá sentido si en el futuro existe una pantalla de oferta individual.
+
+3. **El aviso en foreground filtra por `data['screen']` (originalmente `data['route']`), no por `eventType`.** El Backend manda `screen: 'ride-offer'` en el `data` de `RIDE_OFFER_CREATED`; `PushMessageHandler` solo materializa un aviso local para ese valor exacto y descarta el resto con `debugPrint`. ID de notificación fijo: una propuesta nueva reemplaza el aviso anterior en vez de apilarse. (La clave era `route` en la primera versión de este checkpoint; se renombró a `screen` pocos días después — ver la entrada del fix `route`→`screen` más abajo.)
+
+Alternativas descartadas:
+- Des-registrar el dispositivo en `clearSession()` con un `DELETE` best-effort — descartada por innecesaria (ver punto 1).
+- Construir el handler de tap con navegación "para dejarlo listo" — descartada: no hay pantalla a la que navegar, sería código muerto.
+
+Explícitamente NO tocado:
+El polling de 3s de la lista de propuestas (sigue siendo la fuente de verdad — la push es solo el aviso), sonido personalizado ("tuki"), ícono de notificación dedicado, fallback in-app si el permiso está denegado (los tres pospuestos a checkpoints futuros, cuando existan los archivos de audio/diseño), Backend, Passenger App, Admin Web, producción.
+
+Evidencia:
+`lib/features/notifications/data/device_id_store.dart`, `push_messaging_service.dart`, `push_registration_repository.dart`, `push_registration_coordinator.dart`, `push_message_handler.dart`, `local_notifications_service.dart`; `lib/features/auth/presentation/driver_splash_screen.dart` (disparo del registro tras confirmar sesión); `lib/main.dart` (init best-effort + canal `ride_offers`); `android/app/build.gradle.kts` (`coreLibraryDesugaring`), `android/settings.gradle.kts`, `android/app/src/main/AndroidManifest.xml` (`POST_NOTIFICATIONS`, `default_notification_channel_id`). Tests: `device_id_store_test.dart`, `push_registration_coordinator_test.dart`, `push_registration_repository_test.dart`, `push_message_handler_test.dart`, `driver_splash_screen_test.dart`. Commit `c11b48f`, `main`@`c11b48f4337914969cd4440c20b5c8382e05f6b9`.
+
+---
+
+## `DRIVER-PUSH-R1` (fix) — clave `route`→`screen` en el payload de notificaciones + `errorBuilder` de red de seguridad (2026-09-02)
+
+Estado:
+**FINAL-CLOSED-ON-MAIN.** Integrado a `main`@`2fdfd60717e9de996cf95f7f8df9a1104e129309` mediante fast-forward puro (rama `test/fcm-screen-key-fix` desde `c11b48f`, un solo commit `2fdfd60`). `flutter analyze` limpio, `flutter test` 875/875. Verificado en emulador con force-stop del proceso + simulación del intent real de tap de notificación. `test/fcm-screen-key-fix` eliminada local y remotamente tras confirmar contención. Parte del fix cross-repo coordinado con Backend (`main`@`48d797bb`) y `tukituki-passenger-app` (`main`@`e17d760`) — ver `historial-checkpoints.md`, entrada propia del fix.
+
+Qué se decidió:
+
+1. **Leer `data['screen']` en vez de `data['route']`.** La clave `route` dentro del objeto `data` de una notificación FCM colisiona con `EXTRA_INITIAL_ROUTE`, constante reservada del embedding de Flutter en Android: con la app completamente terminada, Android copia cada entrada de `data` como extra del intent de arranque, y Flutter usa el extra llamado literalmente `"route"` como `initialRoute`, salteándose la navegación normal. Como `'ride-offer'` no es una ruta declarada, la app arrancaba con `GoException: no routes for location`. El Backend renombró la clave a `screen` en todas sus notificaciones (`main`@`48d797bb`); esta app se alinea: `resolveRideUpdateKind()` y el `debugPrint` de `_handleMessage()` leen `data['screen']`, mismos valores comparados. Corte limpio, sin compatibilidad con el nombre viejo (STAGING sin usuarios reales).
+
+2. **`errorBuilder` de red de seguridad en el `GoRouter` → `RouteNotFoundScreen`.** Independientemente del renombre, se agregó una pantalla de rescate: ante cualquier ruta que `go_router` no logre resolver (por la causa que sea, ahora o en el futuro), el conductor ve una pantalla con un botón real que navega a `/splash` (el resolver de sesión). Reemplaza al `ErrorScreen` por defecto de `go_router`, cuyo botón "Home" apunta a `/` — ruta que no existe en esta app y dejaba al usuario atrapado sin salida (fue exactamente lo que agravó el bug de arriba en las pruebas físicas).
+
+Por qué las dos cosas juntas:
+El renombre elimina la causa conocida; el `errorBuilder` es el cinturón por si aparece otra causa. Se decidió no confiar solo en el renombre: una ruta inválida que deje al usuario sin salida es un dead-end lo bastante grave como para tener una malla de contención permanente, no solo la corrección puntual.
+
+Alternativas descartadas:
+- Mantener `route` y filtrar/renombrar el extra en el lado nativo (Android) antes de que Flutter lo lea — descartada: frágil, específico de plataforma, y no ayuda a las otras claves de `data`; renombrar en el origen (Backend) es la solución correcta y única.
+- Solo renombrar, sin `errorBuilder` — descartada: deja la app sin malla de contención ante cualquier ruta inválida futura de otra causa.
+
+Explícitamente NO tocado:
+El resto del flujo de push (registro, aviso en foreground), el polling, Backend salvo la coordinación del renombre, Passenger App salvo la coordinación, Admin Web, producción.
+
+Evidencia:
+`lib/features/notifications/data/push_message_handler.dart` (`resolveRideUpdateKind()`, `_handleMessage()`), `lib/core/router/app_router.dart` (`errorBuilder`), `lib/core/router/route_not_found_screen.dart` (nuevo). Tests: `push_message_handler_test.dart` (clave `route`→`screen` en todos los casos), `test/core/router/route_not_found_screen_test.dart` (nuevo — ruta inválida muestra el fallback sin crash, el botón navega a `/splash`). Commit `2fdfd60`, `main`@`2fdfd60717e9de996cf95f7f8df9a1104e129309`. Backend coordinado: `main`@`48d797bb556a63664ee2a79adb10f50839fb1688`.
