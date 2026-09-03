@@ -7,7 +7,7 @@ Branch analizada:
 main
 
 Última actualización:
-2026-09-02
+2026-09-03
 
 Fuente de verdad:
 Este documento es contexto auxiliar. Si contradice al código actual,
@@ -1531,3 +1531,120 @@ Alternativas descartadas:
 
 Evidencia:
 `lib/features/notifications/data/push_message_handler.dart` (`resolveRideUpdateKind()`, `_handleMessage()`), `lib/features/notifications/data/local_notifications_service.dart` (comentario del enum), `lib/core/router/app_router.dart` (`errorBuilder`), `lib/core/router/route_not_found_screen.dart` (nuevo). Tests: `push_message_handler_test.dart` y `push_cold_start_test.dart` (clave `route`→`screen` en todos los casos), `test/core/router/route_not_found_screen_test.dart` (nuevo — ruta inválida muestra el fallback sin crash, el botón navega a `/splash`). Commit `e17d760`, `main`@`e17d760253dbe47bf3acfa631268fec610867b19`. Backend coordinado: `main`@`48d797bb556a63664ee2a79adb10f50839fb1688`.
+
+---
+
+## Nombre corto de dirección desde el backend — evaluado, no implementado (2026-09-03)
+
+Estado:
+EVALUADO, NO IMPLEMENTADO. Ningún código tocado — ni en esta app ni
+en `tukituki-backend`. Investigación cerrada el 2026-09-03; esta
+entrada es el "detalle del costo estimado" que el doc-comment de
+`_shortAddressLabel` (`HOME-LAYOUT-R1`) prometía y que nunca se había
+escrito (ver `errores-conocidos.md`, entrada de la referencia rota,
+ahora marcada RESUELTA). Complementa la alternativa descartada de la
+entrada `FARE-PANEL-R1` — tarjetas de origen/destino… (etapa 5).
+
+Contexto:
+Hoy la etiqueta de "nombre corto" del origen (y del destino elegido
+en el mapa o sugerido del historial) se arma del lado cliente con
+`shortAddressLabel()`
+(`lib/features/home/domain/short_address_label.dart`): corta la
+dirección por la primera coma. Es una heurística frágil y así está
+documentada. Existe porque el Backend solo expone la dirección
+completa en un único string plano — `formatted_address` de Google —
+sin ningún campo corto. La solución correcta sería que el Backend
+arme el nombre corto a partir de `address_components` de Google, que
+hoy descarta por completo.
+
+Hallazgos de la investigación:
+- `google-geocoding.service.ts` (Backend) solo lee
+  `results[0].formatted_address` de la respuesta de Google. El array
+  `address_components` (que trae `street_number`, `route`,
+  `sublocality`, `locality`, etc. ya separados, con `long_name` y
+  `short_name` cada uno) nunca se parsea ni se tipa. Los dos
+  endpoints que resuelven direcciones — `GET fares/origin-address` y
+  `POST fares/estimate` — pasan por ese mismo método, que devuelve
+  un `string` plano.
+- Armar un nombre corto de verdad NO es un simple
+  `street_number + route`. Hace falta una cadena de fallback:
+  `street_number + route` → `route` solo → `sublocality`/
+  `neighborhood` → `locality` → la heurística actual (corte por la
+  primera coma) como último recurso. Es decir, la heurística frágil
+  no desaparece: pasa a ser el último escalón, ejecutándose sobre
+  datos mejores.
+- El `origin` es siempre un punto de GPS puro, y ese es justo el
+  caso donde con más frecuencia falta `street_number` en Perú
+  (cobertura de numeración irregular fuera de vías principales, GPS
+  de celular que rara vez cae en precisión `ROOFTOP`). O sea: la
+  mejora sería parcial, no total — los casos "calle + número" y
+  "solo calle" mejoran; los puntos sin datos de calle siguen
+  cayendo en la heurística vieja.
+- `OriginAddressResponseDto` y `FareQuoteLocationResponseDto` son
+  DTOs separados, sin base común (viven en
+  `dto/origin-address.dto.ts` y `dto/fare-estimate-response.dto.ts`).
+  Ambos se arman como object literal plano en el servicio (no hay
+  `plainToInstance` en el módulo `fares`), así que exponer el campo
+  nuevo es agregar una propiedad + su `@ApiProperty` en cada uno.
+
+Escenarios de alcance:
+- **Escenario A — sin persistencia**: el nombre corto solo se
+  calcula y se devuelve en las respuestas de
+  `GET fares/origin-address` y `POST fares/estimate`. ~1 día de
+  trabajo. Toca `google-geocoding.service.ts` (tipo ampliado +
+  helper `buildShortName` + cadena de fallback),
+  `origin-address.service.ts` y `fares.service.ts` (propagar el
+  cambio de tipo de retorno, hoy `string`), y los 2 DTOs de
+  respuesta. Actualiza 4 archivos de test — el grueso es reformar
+  ~30 call sites de mocks de `reverseGeocode` en
+  `fares.service.spec.ts` (hoy `mockResolvedValue('string')`) más
+  la matriz nueva de casos en `google-geocoding.service.spec.ts`
+  (sin `street_number`, sin `route`, POI). Sin migración: es
+  puramente transformación de respuesta.
+- **Escenario B — persistido** en `fare_quotes` y `rides`, con lo
+  cual el nombre corto queda disponible también en historial de
+  viajes, recibo, panel admin, oferta al conductor, links de
+  seguridad y métricas. ~2 días. Requiere 2 migraciones nuevas
+  (columnas en `fare_quotes` y en `rides`), plomería en ~10
+  servicios de lectura (varios con SQL cruda:
+  `ride-history.service.ts`, `admin-rides.service.ts`,
+  `operational-metrics.service.ts`) y sus DTOs, y una decisión de
+  backfill para las filas ya existentes (columna nullable y cálculo
+  diferido, o recálculo masivo, o dejar null en históricos).
+- El Escenario A cubre el pedido original — la etiqueta de Home y de
+  `OfferFareScreen`. El Escenario B es de mayor alcance y no está
+  pedido todavía.
+
+Caso borde relevante:
+Este cambio NO mejora el caso "el destino se eligió tocando un lugar
+con nombre propio, como una plaza o un parque". El reverse geocoding
+no devuelve de forma confiable el nombre del lugar
+(`address_components` ahí trae la vía cercana, no "Plaza de Armas").
+Ese caso ya está bien resuelto por otro camino: cuando el destino se
+elige por búsqueda, Google Places Autocomplete entrega `primaryText`
+(el nombre corto real) y la app ya lo usa — ver la entrada
+`FARE-PANEL-R1` de la etapa 5. El campo del Backend solo aportaría
+en los caminos que hoy pasan por reverse geocoding (origen siempre;
+destino elegido en el mapa o sugerido del historial).
+
+Decisión:
+No implementado por ahora. Queda evaluado y documentado para si se
+decide priorizarlo más adelante — probablemente el Escenario A, que
+cubre el caso real pedido con el menor esfuerzo y riesgo, y sin
+tocar la base de datos.
+
+Evidencia:
+Investigación por lectura de `tukituki-backend` (`main`@`48d797bb`):
+`src/modules/fares/google-geocoding.service.ts`,
+`src/modules/fares/origin-address.service.ts`,
+`src/modules/fares/fares.service.ts`,
+`src/modules/fares/dto/origin-address.dto.ts`,
+`src/modules/fares/dto/fare-estimate-response.dto.ts`,
+`src/modules/fares/dto/fare-estimate-location.dto.ts`,
+`src/modules/fares/entities/fare-quote.entity.ts`,
+`src/modules/fares/*.spec.ts`,
+`test/ride-financial-flow.e2e-spec.ts`. Lado de esta app:
+`lib/features/home/domain/short_address_label.dart`,
+`lib/features/fare/data/fare_repository.dart`,
+`lib/features/fare/domain/fare_estimate.dart`. Ningún commit — no se
+tocó código.
