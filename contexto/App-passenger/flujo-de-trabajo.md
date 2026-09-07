@@ -10,7 +10,7 @@ Commit analizado:
 a5d2411e791c391d4dca72a79e21cf6e73395335
 
 Última actualización:
-2026-08-15
+2026-09-03 (agregada la nota operativa sobre el bug intermitente de atribución de IA de Claude Code y el procedimiento de verificación obligatoria de commits)
 
 Fuente de verdad:
 Este documento es contexto auxiliar. Si contradice al código actual,
@@ -111,6 +111,26 @@ Patrones observables (ver `convenciones.md` para el detalle):
 mensajes `feat:`/`fix:`/`chore:` en inglés, historia lineal en `main`,
 sin ramas remotas adicionales ni tags. No hay `CONTRIBUTING.md` ni
 plantillas de PR en el repo.
+
+## Nota operativa — atribución de IA en los commits (Claude Code)
+
+**Bug confirmado en vivo (2026-09-03, durante `PROFILE-EDIT-R1`).** Aunque `~/.claude/settings.json` tenga `attribution.commits = false`, **algunas ejecuciones de Claude Code igual agregan trailers de atribución** (`Co-Authored-By: Claude …` y/o `Claude-Session: …`) al mensaje de commit. Ese día ocurrió **2 veces**, en sesiones nuevas (no reutilizadas) y en 2 repositorios distintos (`tukituki-backend` y `tukituki-passenger-app`). Es un bug del lado de la herramienta, sin fix conocido al momento de escribir esto — la configuración no es garantía.
+
+**Procedimiento obligatorio, sin excepciones:**
+
+1. Después de **cada** commit (incluido cada `--amend`), correr:
+   ```
+   git log -1 --format="%an <%ae>%n%B"
+   ```
+2. Si aparece cualquier trailer `Co-Authored-By:` de una IA o `Claude-Session:` (o similar), corregirlo **antes de hacer push**:
+   ```
+   git commit --amend -m "<mensaje limpio, sin trailers>"
+   ```
+   y volver a verificar con el `git log -1` de arriba.
+3. El autor debe quedar siempre `Juanjo <jjtorres.devtech@gmail.com>` y el cuerpo del mensaje sin ninguna línea de atribución de herramienta.
+4. Recién con la verificación limpia se hace `git push` / el fast-forward a `main`.
+
+Aplica a los tres repos del proyecto. Esta verificación va **antes** de cualquier publicación a un remoto, sea rama `test/*` o `main`.
 
 ## Deploy
 

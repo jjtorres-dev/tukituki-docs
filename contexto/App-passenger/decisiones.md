@@ -1648,3 +1648,133 @@ Investigación por lectura de `tukituki-backend` (`main`@`48d797bb`):
 `lib/features/fare/data/fare_repository.dart`,
 `lib/features/fare/domain/fare_estimate.dart`. Ningún commit — no se
 tocó código.
+
+---
+
+## `PROFILE-EDIT-R1` — correo del pasajero: opcional, editable en el perfil, sin unicidad (2026-09-03)
+
+Estado:
+ACTIVA — Backend `main`@`321f7b37f17624e83d86f9f12e9cadf198b39781` (columna + DTOs + migración `1787040000000-AddPassengerProfileEmail`); cliente `main`@`d7f0401` (campo editable en `EditProfileScreen`).
+
+Qué se decidió:
+`passenger_profiles.email` es `varchar(255)`, **nullable** y **sin restricción `UNIQUE`**. Se valida con `@IsEmail` solo cuando viene informado; se normaliza (trim + minúsculas, vacío/espacios → null) antes de validar. Es editable desde el cliente en «Editar perfil» como campo opcional; no se pide en el registro corto, no se mueve a `User`, no se le agrega verificación por OTP.
+
+Por qué:
+Espejo exacto del campo `driver_profiles.email` ya existente (ver `Backend/decisiones.md`, «DriverProfile.email opcional, sin unicidad»). Exigir unicidad de correo (a) bloquearía cuentas familiares que legítimamente comparten un mismo correo, y (b) convertiría el endpoint en un vector de enumeración de cuentas (probar correos y leer si el `409` los delata). No existe ninguna decisión de producto que pida unicidad de correo para pasajeros — inventarla sería alcance no autorizado. El correo hoy no tiene consumidor transaccional (no hay reset de contraseña por correo, no hay notificaciones por email); se guarda como dato de contacto para cuando exista.
+
+Alternativas descartadas:
+- `UNIQUE` con índice parcial sobre no-nulos — descartada por lo de arriba (cuentas familiares + enumeración).
+- Pedir el correo en el registro — descartada: el registro corto es decisión de producto vigente (celular + contraseña + nombre); el correo es opcional y editable después del alta.
+
+Evidencia:
+Backend: `src/modules/passengers/entities/passenger-profile.entity.ts`, `src/modules/passengers/dto/create-passenger-profile.dto.ts`, `src/modules/passengers/dto/passenger-profile-response.dto.ts`, `src/modules/passengers/passengers.controller.ts`, `src/modules/passengers/passengers.service.ts`, migración `1787040000000-AddPassengerProfileEmail.ts`, `passengers.service.spec.ts`. Cliente: `lib/features/passenger/presentation/edit_profile_screen.dart`, `lib/features/passenger/data/passenger_profile_repository.dart`.
+
+---
+
+## `PROFILE-EDIT-R1` — el teléfono no es editable desde el cliente (2026-09-03)
+
+Estado:
+ACTIVA — cliente `main`@`d7f0401`. El teléfono se muestra en `EditProfileScreen` como dato de solo lectura (candado + nota), nunca como campo editable.
+
+Qué se decidió:
+«Editar perfil» muestra el `phoneE164` del pasajero como dato informativo, visualmente distinto de un campo editable (ícono de candado + nota corta), traído del mismo payload de `GET`/`PATCH passengers/me` (el Backend lo agrega desde el JWT ya validado, sin consulta extra a `auth/me`). No hay ningún control para cambiarlo.
+
+Por qué:
+El teléfono es el identificador de login (`phoneE164`, único en la tabla `users`), no un dato de perfil. El Backend no tiene ningún mecanismo de cambio de número. Habilitar la edición requeriría un flujo completo de verificación por SMS del número nuevo (`OTP-R3`), que está **pausado** por decisión de producto (`DEMO-PRIORITY-DECISION-R1`, 2026-08-16): el proyecto todavía no tiene proveedor de SMS real. Mostrar el teléfono aunque no se pueda editar sí es útil: el pasajero confirma con qué número está registrado.
+
+Alternativas descartadas:
+- Campo editable que llame a `PATCH passengers/me` con el teléfono — descartada: `phoneE164` no está en `UpdatePassengerProfileDto`, y cambiarlo sin re-verificar rompería la unicidad de login y la política telefónica del MVP (`CROSS-APP-R4.3`).
+- Ocultar el teléfono por completo — descartada: verlo en solo lectura responde «¿con qué número me registré?» sin abrir la caja de la edición.
+
+Evidencia:
+`lib/features/passenger/presentation/edit_profile_screen.dart`; `PassengerProfileResponseDto.phoneE164` (Backend `main`@`321f7b37`). Ver `estado-actual.md` sección 12 (política MVP de verificación telefónica) y `DEMO-PRIORITY-DECISION-R1`.
+
+---
+
+## `PROFILE-EDIT-R1` — campo «ciudad» en el perfil: evaluado y descartado (2026-09-03)
+
+Estado:
+EVALUADO, NO IMPLEMENTADO. Ningún código tocado.
+
+Qué se decidió:
+No se agrega un campo «ciudad» al perfil del pasajero.
+
+Por qué:
+No tiene consumidor real:
+- Las tarifas y el emparejamiento con conductores se calculan por GPS (coordenadas reales de origen/destino, radio progresivo 2→5→10 km), nunca por un campo de perfil.
+- El conductor no ve la ciudad del pasajero en ningún punto del flujo.
+- TukiTuki opera hoy en un solo conglomerado urbano (Tarapoto / Morales / La Banda de Shilcayo). Un campo de texto libre de ciudad, con una sola respuesta posible en la práctica, solo generaría datos sucios («Tarapoto», «tarapoto», «San Martín», «SMP»…) sin ningún valor analítico ni operativo.
+
+Alternativas descartadas:
+- Selector cerrado de ciudad (dropdown) — descartada igual: aunque evita el texto sucio, sigue sin consumidor, y añadir un paso al perfil sin beneficio va contra la línea de «no saturar el alta/edición» (ver `estado-actual.md` sección 7).
+
+Evidencia:
+Decisión de producto registrada durante `PROFILE-EDIT-R1`. Matching y tarifa por GPS: `Backend/decisiones.md` («Matching de conductores con radio de búsqueda creciente»), `estado-actual.md` secciones 5 y 6.
+
+---
+
+## `PROFILE-EDIT-R1` — patrón sentinel en `updateMyProfile()` para distinguir «omitir» de «borrar» un campo opcional (2026-09-03)
+
+Estado:
+ACTIVA — cliente `main`@`d7f0401`.
+
+Qué se decidió:
+`PassengerProfileRepository.updateMyProfile()` usa un valor centinela (`_emailUnchanged`, una instancia `Object()` privada) como default de sus parámetros opcionales. Así distingue tres intenciones en la llamada:
+- **parámetro omitido** (queda el centinela) → la clave no se incluye en el body del `PATCH` → el Backend deja el campo como está.
+- **parámetro con valor** → se manda el valor.
+- **parámetro explícitamente `null`** → se manda `"campo": null` → el Backend borra el campo.
+
+Refleja del lado cliente la misma semántica que el Backend ya implementa (`updateMyProfile` distingue clave ausente de `email: null`).
+
+Por qué:
+El correo es opcional: el pasajero puede querer *no tocarlo* o *borrarlo*, y en Dart ambos casos colapsarían a `null` si el parámetro fuera `String? email = null`. El centinela recupera la diferencia sin agregar un segundo parámetro booleano tipo `clearEmail`. Es un mecanismo reutilizable para los próximos campos opcionales del perfil con esta misma necesidad.
+
+Alternativas descartadas:
+- Segundo parámetro `bool clearEmail` — descartada: dos parámetros acoplados para una sola intención, fácil de usar mal.
+- Mandar siempre todos los campos (PUT completo) — descartada: `PATCH passengers/me` es parcial por diseño; mandar todo obligaría al cliente a conocer y reenviar campos que no está editando.
+
+Evidencia:
+`lib/features/passenger/data/passenger_profile_repository.dart` (`updateMyProfile`, `static const Object _emailUnchanged = Object();`); Backend `src/modules/passengers/passengers.service.ts` (`updateMyProfile`, distinción clave-ausente / `null`), `passengers.service.spec.ts` (casos set/clear/untouched).
+
+---
+
+## `PROFILE-EDIT-R1` — el visor de foto en grande duplica el patrón `showDialog` en vez de compartirlo con `ride_searching_screen.dart` (2026-09-03)
+
+Estado:
+ACTIVA — cliente `main`@`5a7661d` (sub-etapa 2b).
+
+Qué se decidió:
+«Ver la foto en grande» al tocar el avatar en `EditProfileScreen` se implementó con su propio `showDialog` (imagen `BoxFit.contain`, cierre por X / back Android / tap fuera), **copiando** la estructura de `_showDriverPhotoViewer` de `ride_searching_screen.dart` en vez de extraer un widget/función compartida.
+
+Por qué:
+El visor original está acoplado a `RideSearchingScreen`: lee `_stableDriverPhotoUri` (el URI estable en memoria que sortea la rotación del capability token del conductor durante el polling — ver entrada `CROSS-APP-R4.3`), depende de `ride.status == DRIVER_ARRIVED` para habilitar el tap, y su copy/estados son del contexto de «identifica a tu conductor». El caso del perfil no tiene polling, no tiene rotación de token que sortear en ese punto, y su gating es simplemente «hay foto real». Extraer un componente común obligaría a parametrizar todo ese acoplamiento por un solo call site nuevo — más superficie y más riesgo que una copia de ~15 líneas. Si aparece un tercer consumidor, ahí sí conviene extraer.
+
+Alternativas descartadas:
+- Extraer un `PhotoViewerDialog` compartido ahora — descartada por lo de arriba (un solo consumidor nuevo, acoplamiento del original).
+- Una ruta nueva `/photo-viewer` — descartada: `showDialog` no necesita ruta, dependencia ni cambio en el `GoRouter`; mismo criterio que ya se usó en `CROSS-APP-R4.3`.
+
+Evidencia:
+`lib/features/passenger/presentation/edit_profile_screen.dart` (visor propio); `lib/features/ride/presentation/ride_searching_screen.dart` (`_showDriverPhotoViewer`, original acoplado).
+
+---
+
+## `PROFILE-EDIT-R1` — `PassengerPhotoUploader` usa timeouts explícitos en su `Dio` efímero (desviación del patrón del conductor) (2026-09-03)
+
+Estado:
+ACTIVA — cliente `main`@`5a7661d` (sub-etapa 2b).
+
+Qué se decidió:
+El `Dio` efímero que `PassengerPhotoUploader` crea para el `PUT` directo al bucket (presign → PUT → complete) lleva `connectTimeout` (15 s), `sendTimeout` (60 s) y `receiveTimeout` (30 s) explícitos. Es una **desviación deliberada** respecto al uploader equivalente del conductor, que no fija timeouts (usa el timeout infinito por defecto de Dio). El `dioFactory` queda inyectable para poder afirmar esos timeouts en test.
+
+Por qué:
+El uploader del conductor puede quedarse colgado indefinidamente si la subida se estanca (red móvil que se cae a mitad del `PUT`, bucket que no responde). La URL presignada solo vive 300 s: pasado ese tiempo el `PUT` va a fallar igual, así que esperar más que eso no aporta nada y deja al usuario con un spinner eterno. Los timeouts explícitos convierten ese caso en un error manejable («no se pudo subir, reintenta») dentro de una ventana razonable.
+
+Alternativas descartadas:
+- Copiar el patrón del conductor tal cual (sin timeouts) — descartada por el cuelgue indefinido descrito.
+- Un único `Timer` de cancelación manual alrededor de la llamada — descartada: `Dio` ya expone los tres timeouts de forma nativa; reimplementarlo a mano sería más frágil.
+
+Nota:
+Queda como candidato para llevar el mismo cambio al uploader del conductor en un checkpoint futuro de esa app (no se tocó `tukituki-driver-app` en `PROFILE-EDIT-R1`).
+
+Evidencia:
+`lib/features/passenger/data/passenger_photo_uploader.dart` (config del `Dio` efímero: `connectTimeout` 15 s / `sendTimeout` 60 s / `receiveTimeout` 30 s, `dioFactory` inyectable); `lib/features/passenger/data/passenger_storage_repository.dart`; `test/features/passenger/data/passenger_photo_uploader_test.dart`.

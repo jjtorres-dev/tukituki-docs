@@ -10,7 +10,7 @@ Commit analizado:
 1e029a3ea5aded92cac21dcd4f5996e7bc167bff
 
 Última actualización:
-2026-09-02
+2026-09-03
 
 Fuente de verdad:
 Este documento es contexto auxiliar. Si contradice al código actual,
@@ -666,3 +666,50 @@ Alternativas descartadas:
 
 Evidencia:
 `src/modules/notifications/notification-event.handler.ts` (10 ocurrencias de la clave del objeto `data`). Commit `48d797bb`, `main`@`48d797bb556a63664ee2a79adb10f50839fb1688`. Coordinado con `tukituki-driver-app` (`main`@`2fdfd60717e9de996cf95f7f8df9a1104e129309`, lee `data['screen']` + `errorBuilder`) y `tukituki-passenger-app` (`main`@`e17d760253dbe47bf3acfa631268fec610867b19`, ídem).
+
+---
+
+## `PROFILE-EDIT-R1` — `PassengerProfile.email` opcional, sin unicidad; `phoneE164` expuesto en el perfil (2026-09-03)
+
+Estado:
+ACTIVA — `main`@`321f7b37f17624e83d86f9f12e9cadf198b39781` (fast-forward sobre `main`@`48d797bb`). Migración `1787040000000-AddPassengerProfileEmail`.
+
+Qué se decidió:
+Se agrega `PassengerProfile.email` (nullable, `varchar(255)`, validado con `@IsEmail` solo cuando viene informado). `CreatePassengerProfileDto` normaliza el valor (trim + minúsculas, colapsa vacío/solo-espacios a `null`) antes de validar; `UpdatePassengerProfileDto` lo hereda vía `PartialType`. **No se exige, no se mueve a `User`, no se agrega verificación por OTP ni restricción `UNIQUE`.** `PassengerProfileResponseDto` pasa a exponer `email` y `phoneE164`: el teléfono vive en `User`, no en el perfil, pero ya está en el request autenticado (JWT), así que el controlador pasa `user.phoneE164` a `toProfileResponse` — sin query extra. `updateMyProfile` distingue «dejar como está» (clave `email` ausente) de «borrar» (`email: null` explícito), misma semántica que los demás campos opcionales del perfil.
+
+Por qué:
+Espejo exacto del diseño ya existente de `driver_profiles.email` (ver «DriverProfile.email opcional, sin unicidad (DRIVER-ONBOARDING-R2)» en este mismo documento). No existe ninguna decisión de producto que exija unicidad de email para pasajeros. Exigir `UNIQUE` (a) bloquearía cuentas familiares que comparten un correo, y (b) convertiría el endpoint en un vector de enumeración de cuentas. Exponer `phoneE164` en el perfil es lo que permite a la app mostrar el teléfono (de solo lectura) en «Editar perfil» sin una llamada adicional a `auth/me`.
+
+Alternativas descartadas:
+- `UNIQUE` (índice parcial sobre no-nulos) en `passenger_profiles.email` — descartada por cuentas familiares + enumeración de cuentas.
+- Devolver el teléfono con un `GET` separado a `auth/me` desde el cliente — descartada: ya está en el JWT del request, agregarlo a la respuesta del perfil es gratis.
+
+Evidencia:
+`src/modules/passengers/entities/passenger-profile.entity.ts`, `src/modules/passengers/dto/create-passenger-profile.dto.ts`, `src/modules/passengers/dto/passenger-profile-response.dto.ts`, `src/modules/passengers/passengers.controller.ts`, `src/modules/passengers/passengers.service.ts`, `src/modules/passengers/passengers.service.spec.ts`, migración `src/migrations/1787040000000-AddPassengerProfileEmail.ts`. Commit `321f7b37`.
+
+---
+
+## `PROFILE-EDIT-R1` — `DELETE /passengers/me/photo`: endpoint dedicado que desvincula la foto sin borrar el objeto del bucket (2026-09-03)
+
+Estado:
+ACTIVA — `main`@`9c770da34897f23df702f7e68dcf2710df9749bf` (fast-forward sobre `321f7b37`). Sin migración, sin cambio de esquema.
+
+Qué se decidió:
+Un endpoint nuevo y dedicado, `DELETE /passengers/me/photo`, que pone `photoObjectKey` y `photoUrl` en `null` en el perfil del pasajero autenticado y **no borra el objeto del bucket**. Devuelve el perfil completo actualizado (`200` + `PassengerProfileResponseDto`, no `204`). Es idempotente: llamarlo sobre un perfil que ya no tiene foto no lanza. El flujo de subida (`presign` / `PUT` / `complete`) ya existía de `STORAGE-R2`/`STORAGE-R3` y se reutiliza sin cambios — lo único que faltaba era «quitar».
+
+Por qué un endpoint dedicado y no extender `PATCH /passengers/me` (`updateMyProfile`):
+`photoObjectKey` es estado interno de almacenamiento y **nunca** se expone en un DTO de request — aceptar `photoObjectKey: null` (o `photoUrl: null`) por el `PATCH` genérico obligaría a meter ese campo interno en el contrato público y a distinguir «ausente» de «null» también para él. Un verbo `DELETE` sobre un sub-recurso (`/me/photo`) expresa la intención sin ampliar la superficie de `UpdatePassengerProfileDto`, y es el mismo patrón que ya usa el conductor para desvincular un documento (`deleteMyDocument`).
+
+Por qué no se borra el objeto del bucket:
+Mismo criterio que `deleteMyDocument` del conductor: la operación de producto es «desvincular», no «purgar almacenamiento». Borrar el binario invita a fallos parciales (DB actualizada, `DeleteObject` fallando o al revés) y complica un eventual undo/auditoría. La limpieza real de objetos huérfanos del bucket, si se prioriza, es un proceso aparte (barrido por _lifecycle_ o job), no una responsabilidad del request del usuario.
+
+Devuelve `200` con el perfil, no `204`:
+Consistente con `PATCH /passengers/me`, y le ahorra al cliente un `GET` inmediato para refrescar el estado tras quitar la foto.
+
+Alternativas descartadas:
+- Extender `updateMyProfile` para aceptar el borrado de la foto por el `PATCH` genérico — descartada (mete estado interno de storage en el contrato público).
+- `DELETE` que además haga `DeleteObject` en el bucket — descartada (fallos parciales, sin undo; la purga es un proceso aparte).
+- Responder `204 No Content` — descartada (forzaría un `GET` extra del cliente).
+
+Evidencia:
+`src/modules/passengers/passengers.controller.ts` (`@Delete('me/photo')`), `src/modules/passengers/passengers.service.ts` (`removeProfilePhoto`), `src/modules/passengers/passengers.service.spec.ts` (nula ambos campos y devuelve la entidad actualizada; caso idempotente). Commit `9c770da3`, `main`@`9c770da34897f23df702f7e68dcf2710df9749bf`. Patrón de referencia: `deleteMyDocument` (módulo `drivers`).
